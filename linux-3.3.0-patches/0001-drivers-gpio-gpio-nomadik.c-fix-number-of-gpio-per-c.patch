@@ -1,0 +1,47 @@
+From dc3eb250921317f719935616d84e93f6ce15717b Mon Sep 17 00:00:00 2001
+From: Fabrizio Ghiringhelli <fghiro@gmail.com>
+Date: Tue, 24 Apr 2012 18:29:21 +0200
+Subject: [PATCH] drivers/gpio/gpio-nomadik.c: fix number of gpio per chip
+
+In nmk_gpio_probe(), 'chip->ngpio' was given the value of 'num_gpio'
+member of platform data, which happens to be 0 because it is not
+initialized.
+To overcome this, I set up the correct value (NMK_GPIO_PER_CHIP) in
+the 'nmk_gpio_template' data structure, and I deleted the assigment
+from platform data.
+---
+ drivers/gpio/gpio-nomadik.c |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/drivers/gpio/gpio-nomadik.c b/drivers/gpio/gpio-nomadik.c
+index 839624f..b5dafc0 100644
+--- a/drivers/gpio/gpio-nomadik.c
++++ b/drivers/gpio/gpio-nomadik.c
+@@ -6,6 +6,8 @@
+  *   Rewritten based on work by Prafulla WADASKAR <prafulla.wadaskar@st.com>
+  * Copyright (C) 2011 Linus Walleij <linus.walleij@linaro.org>
+  *
++ *       Updated 2012 Fabrizio Ghiringhelli <fghiro@gmail.com>
++ *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 as
+  * published by the Free Software Foundation.
+@@ -957,6 +959,7 @@ static struct gpio_chip nmk_gpio_template = {
+ 	.to_irq			= nmk_gpio_to_irq,
+ 	.dbg_show		= nmk_gpio_dbg_show,
+ 	.can_sleep		= 0,
++	.ngpio		= NMK_GPIO_PER_CHIP,
+ };
+ 
+ void nmk_gpio_clocks_enable(void)
+@@ -1134,7 +1137,6 @@ static int __devinit nmk_gpio_probe(struct platform_device *dev)
+ 
+ 	chip = &nmk_chip->chip;
+ 	chip->base = pdata->first_gpio;
+-	chip->ngpio = pdata->num_gpio;
+ 	chip->label = pdata->name ?: dev_name(&dev->dev);
+ 	chip->dev = &dev->dev;
+ 	chip->owner = THIS_MODULE;
+-- 
+1.7.4.1
+
