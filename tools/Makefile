@@ -1,8 +1,5 @@
 CC = $(CROSS_COMPILE)gcc
 
-# Add the user-space include files
-CFLAGS += -I /usr/include
-
 # build evtest executable when user executes "make"
 #all: evtest
 #evtest: evtest.o

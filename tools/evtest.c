@@ -1,11 +1,9 @@
 /*
+ * $Id: evtest.c,v 1.23 2005/02/06 13:51:42 vojtech Exp $
+ *
  *  Copyright (c) 1999-2000 Vojtech Pavlik
- *  Copyright (c) 2009 Red Hat, Inc
  *
  *  Event device test program
- *
- * See INSTALL for installation details or manually compile with
- * gcc -o evtest evtest.c
  */
 
 /*
@@ -30,7 +28,6 @@
 
 #include <stdint.h>
 
-#include <linux/version.h>
 #include <linux/input.h>
 
 #include <string.h>
@@ -192,8 +189,7 @@ char *keys[KEY_MAX + 1] = {
 	[BTN_TOOL_MOUSE] = "ToolMouse",		[BTN_TOOL_LENS] = "ToolLens",
 	[BTN_TOUCH] = "Touch",			[BTN_STYLUS] = "Stylus",
 	[BTN_STYLUS2] = "Stylus2",		[BTN_TOOL_DOUBLETAP] = "Tool Doubletap",
-	[BTN_TOOL_TRIPLETAP] = "Tool Tripletap", [BTN_TOOL_QUADTAP] = "Tool Quadtap",
-	[BTN_GEAR_DOWN] = "WheelBtn",
+	[BTN_TOOL_TRIPLETAP] = "Tool Tripletap", [BTN_GEAR_DOWN] = "WheelBtn",
 	[BTN_GEAR_UP] = "Gear up",		[KEY_OK] = "Ok",
 	[KEY_SELECT] = "Select",		[KEY_GOTO] = "Goto",
 	[KEY_CLEAR] = "Clear",			[KEY_POWER2] = "Power2",
@@ -229,59 +225,9 @@ char *keys[KEY_MAX + 1] = {
 	[KEY_TWEN] = "TWEN",			[KEY_DEL_EOL] = "Delete EOL",
 	[KEY_DEL_EOS] = "Delete EOS",		[KEY_INS_LINE] = "Insert line",
 	[KEY_DEL_LINE] = "Delete line",
-	[KEY_VIDEOPHONE] = "Videophone",	[KEY_GAMES] = "Games",
-	[KEY_ZOOMIN] = "Zoom In",		[KEY_ZOOMOUT] = "Zoom Out",
-	[KEY_ZOOMRESET] = "Zoom Reset",		[KEY_WORDPROCESSOR] = "Word Processor",
-	[KEY_EDITOR] = "Editor",		[KEY_SPREADSHEET] = "Spreadsheet",
-	[KEY_GRAPHICSEDITOR] = "Graphics Editor", [KEY_PRESENTATION] = "Presentation",
-	[KEY_DATABASE] = "Database",		[KEY_NEWS] = "News",
-	[KEY_VOICEMAIL] = "Voicemail",		[KEY_ADDRESSBOOK] = "Addressbook",
-	[KEY_MESSENGER] = "Messenger",		[KEY_DISPLAYTOGGLE] = "Display Toggle",
-	[KEY_SPELLCHECK] = "Spellcheck",	[KEY_LOGOFF] = "Log Off",
-	[KEY_DOLLAR] = "Dollar",		[KEY_EURO] = "Euro",
-	[KEY_FRAMEBACK] = "Frame Back",	 [KEY_FRAMEFORWARD] = "Frame Forward",
-	[KEY_CONTEXT_MENU] = "Context Menu",	[KEY_MEDIA_REPEAT] = "Media Repeat",
-	[KEY_DEL_EOL] = "Delete EOL",		[KEY_DEL_EOS] = "Delete EOS",
-	[KEY_INS_LINE] = "Insert Line",	 [KEY_DEL_LINE] = "Delete Line",
-	[KEY_FN] = "Fn",			[KEY_FN_ESC] = "Fn Esc",
-	[KEY_FN_F1] = "Fn F1",			[KEY_FN_F2] = "Fn F2",
-	[KEY_FN_F3] = "Fn F3",			[KEY_FN_F4] = "Fn F4",
-	[KEY_FN_F5] = "Fn F5",			[KEY_FN_F6] = "Fn F6",
-	[KEY_FN_F7] = "Fn F7",			[KEY_FN_F8] = "Fn F8",
-	[KEY_FN_F9] = "Fn F9",			[KEY_FN_F10] = "Fn F10",
-	[KEY_FN_F11] = "Fn F11",		[KEY_FN_F12] = "Fn F12",
-	[KEY_FN_1] = "Fn 1",			[KEY_FN_2] = "Fn 2",
-	[KEY_FN_D] = "Fn D",			[KEY_FN_E] = "Fn E",
-	[KEY_FN_F] = "Fn F",			[KEY_FN_S] = "Fn S",
-	[KEY_FN_B] = "Fn B",
-	[KEY_BRL_DOT1] = "Braille Dot 1",	[KEY_BRL_DOT2] = "Braille Dot 2",
-	[KEY_BRL_DOT3] = "Braille Dot 3",	[KEY_BRL_DOT4] = "Braille Dot 4",
-	[KEY_BRL_DOT5] = "Braille Dot 5",	[KEY_BRL_DOT6] = "Braille Dot 6",
-	[KEY_BRL_DOT7] = "Braille Dot 7",	[KEY_BRL_DOT8] = "Braille Dot 8",
-	[KEY_BRL_DOT9] = "Braille Dot 9",	[KEY_BRL_DOT10] = "Braille Dot 10",
-	[KEY_NUMERIC_0] = "Numeric 0",		[KEY_NUMERIC_1] = "Numeric 1",
-	[KEY_NUMERIC_2] = "Numeric 2",		[KEY_NUMERIC_3] = "Numeric 3",
-	[KEY_NUMERIC_4] = "Numeric 4",		[KEY_NUMERIC_5] = "Numeric 5",
-	[KEY_NUMERIC_6] = "Numeric 6",		[KEY_NUMERIC_7] = "Numeric 7",
-	[KEY_NUMERIC_8] = "Numeric 8",		[KEY_NUMERIC_9] = "Numeric 9",
-	[KEY_NUMERIC_STAR] = "Numeric *",	[KEY_NUMERIC_POUND] = "Numeric #",
-	[KEY_BATTERY] = "Battery",
-	[KEY_BLUETOOTH] = "Bluetooth",		[KEY_BRIGHTNESS_CYCLE] = "Brightness Cycle",
-	[KEY_BRIGHTNESS_ZERO] = "Brightness Zero", [KEY_DASHBOARD] = "Dashboard",
-	[KEY_DISPLAY_OFF] = "Display Off",	[KEY_DOCUMENTS] = "Documents",
-	[KEY_FORWARDMAIL] = "Forward Mail",	[KEY_NEW]  = "New",
-	[KEY_KBDILLUMDOWN] = "Kbd Illum Down",	[KEY_KBDILLUMUP] = "Kbd Illum Up",
-	[KEY_KBDILLUMTOGGLE] = "Kbd Illum Toggle", [KEY_REDO] = "Redo",
-	[KEY_REPLY] = "Reply",			[KEY_SAVE] = "Save",
-	[KEY_SCALE] = "Scale",			[KEY_SEND] = "Send",
-	[KEY_SCREENLOCK] = "Screen Lock",	[KEY_SWITCHVIDEOMODE] = "Switch Video Mode",
-	[KEY_UWB] = "UWB",			[KEY_VIDEO_NEXT] = "Video Next",
-	[KEY_VIDEO_PREV] = "Video Prev",	[KEY_WIMAX] = "WIMAX",
-	[KEY_WLAN] = "WLAN"
-
 };
 
-char *absval[6] = { "Value", "Min  ", "Max  ", "Fuzz ", "Flat ", "Resolution "};
+char *absval[5] = { "Value", "Min  ", "Max  ", "Fuzz ", "Flat " };
 
 char *relatives[REL_MAX + 1] = {
 	[0 ... REL_MAX] = NULL,
@@ -306,19 +252,6 @@ char *absolutes[ABS_MAX + 1] = {
 	[ABS_DISTANCE] = "Distance",	[ABS_TILT_X] = "XTilt",
 	[ABS_TILT_Y] = "YTilt",		[ABS_TOOL_WIDTH] = "Tool Width",
 	[ABS_VOLUME] = "Volume",	[ABS_MISC] = "Misc",
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30)
-	[ABS_MT_TOUCH_MAJOR] = "Touch Major",
-	[ABS_MT_TOUCH_MINOR] = "Touch Minor",
-	[ABS_MT_WIDTH_MAJOR] = "Width Major",
-	[ABS_MT_WIDTH_MINOR] = "Width Minor",
-	[ABS_MT_ORIENTATION] = "Orientation",
-	[ABS_MT_POSITION_X] = "Position X",
-	[ABS_MT_POSITION_Y] = "Position Y",
-	[ABS_MT_TOOL_TYPE] = "Tool Type",
-	[ABS_MT_BLOB_ID] = "Blob ID",
-	[ABS_MT_TRACKING_ID] = "Tracking ID",
-#endif
-
 };
 
 char *misc[MSC_MAX + 1] = {
@@ -371,7 +304,7 @@ int main (int argc, char **argv)
 	unsigned short id[4];
 	unsigned long bit[EV_MAX][NBITS(KEY_MAX)];
 	char name[256] = "Unknown";
-	int abs[6] = {0};
+	int abs[5];
 
 	if (argc < 2) {
 		printf("Usage: evtest /dev/input/eventX\n");
@@ -413,7 +346,7 @@ int main (int argc, char **argv)
 					printf("    Event code %d (%s)\n", j, names[i] ? (names[i][j] ? names[i][j] : "?") : "?");
 					if (i == EV_ABS) {
 						ioctl(fd, EVIOCGABS(j), abs);
-						for (k = 0; k < 6; k++)
+						for (k = 0; k < 5; k++)
 							if ((k < 3) || abs[k])
 								printf("      %s %6d\n", absval[k], abs[k]);
 					}
