@@ -1,0 +1,81 @@
+From a1b9ca85499cfae9724517eff34f76c1041274e0 Mon Sep 17 00:00:00 2001
+From: Fabrizio Ghiringhelli <fghiro@gmail.com>
+Date: Tue, 8 May 2012 09:25:23 +0200
+Subject: [PATCH]     'board-nhk8815.c' is updated with the registration of i2c devices.
+     Register 'lis3lv02d' inertial sensor with interrupt support.
+
+---
+ arch/arm/mach-nomadik/board-nhk8815.c              |   20 ++++++++++++++++++++
+ .../mach-nomadik/include/mach/lis3lv02d-nhk8815.h  |    1 +
+ 2 files changed, 21 insertions(+), 0 deletions(-)
+ create mode 120000 arch/arm/mach-nomadik/include/mach/lis3lv02d-nhk8815.h
+
+diff --git a/arch/arm/mach-nomadik/board-nhk8815.c b/arch/arm/mach-nomadik/board-nhk8815.c
+index 7c878bf..a030a21 100644
+--- a/arch/arm/mach-nomadik/board-nhk8815.c
++++ b/arch/arm/mach-nomadik/board-nhk8815.c
+@@ -3,6 +3,8 @@
+  *
+  *  Copyright (C) STMicroelectronics
+  *
++ *  Updated 2012 Fabrizio Ghiringhelli <fghiro@gmail.com>
++ *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2, as
+  * published by the Free Software Foundation.
+@@ -21,6 +23,7 @@
+ #include <linux/mtd/onenand.h>
+ #include <linux/mtd/partitions.h>
+ #include <linux/io.h>
++#include <linux/i2c.h>
+ #include <asm/hardware/vic.h>
+ #include <asm/sizes.h>
+ #include <asm/mach-types.h>
+@@ -37,6 +40,8 @@
+ 
+ #include "cpu-8815.h"
+ 
++#include <mach/lis3lv02d-nhk8815.h>
++
+ /* Initial value for SRC control register: all timers use MXTAL/8 source */
+ #define SRC_CR_INIT_MASK	0x00007fff
+ #define SRC_CR_INIT_VAL		0x2aaa8000
+@@ -265,12 +270,27 @@ static struct sys_timer nomadik_timer = {
+ 	.init	= nomadik_timer_init,
+ };
+ 
++/* I2C devices */
++static struct i2c_board_info nhk8815_i2c_devices[] = {
++	{
++		I2C_BOARD_INFO("lis3lv02d", 0x3A >> 1),
++		.irq = NOMADIK_GPIO_TO_IRQ(82),
++		/* No platform data: use driver defaults */
++	},
++	/* will add more devices */
++};
++
+ static void __init nhk8815_platform_init(void)
+ {
+ 	int i;
+ 
+ 	cpu8815_platform_init();
+ 	nhk8815_onenand_init();
++
++	/* Register I2C devices on bus #0 (scl0, sda0) */
++	i2c_register_board_info(0, nhk8815_i2c_devices,
++			ARRAY_SIZE(nhk8815_i2c_devices));
++
+ 	platform_add_devices(nhk8815_platform_devices,
+ 			     ARRAY_SIZE(nhk8815_platform_devices));
+ 
+diff --git a/arch/arm/mach-nomadik/include/mach/lis3lv02d-nhk8815.h b/arch/arm/mach-nomadik/include/mach/lis3lv02d-nhk8815.h
+new file mode 120000
+index 0000000..f6881a2
+--- /dev/null
++++ b/arch/arm/mach-nomadik/include/mach/lis3lv02d-nhk8815.h
+@@ -0,0 +1 @@
++/home/fabri/nomadik/project/drivers/lis3lv02d-nhk8815/lis3lv02d-nhk8815.h
+\ No newline at end of file
+-- 
+1.7.4.1
+
