@@ -1,0 +1,19 @@
+# 
+# === Register map of the li3lv02d accelerometer ===
+#
+# Use with 'lis3_read.sh' script.
+# Add only the registers that needs to be read fo debug
+#
+# -----------------------------------------
+# Register name		Register Address
+# 			(hex format)
+# -----------------------------------------
+CTRL_REG1		20
+CTRL_REG2		21
+CTRL_REG3		22
+STATUS_REG		27
+FF_WU_CFG		30
+FF_WU_SRC		31
+FF_WU_THS_L		34
+FF_WU_THS_H		35
+FF_WU_DURATION		36
