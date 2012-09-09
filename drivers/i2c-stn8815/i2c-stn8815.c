@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/completion.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/err.h>
@@ -44,12 +45,7 @@
 #define I2C_IMSCR		0x02C	/* R/W Interrupt Mask Set/Clear Register */
 #define I2C_RISR		0x030	/* R RAW Interrupt Status Register */
 #define I2C_MISR		0x034	/* R Masked Interrupt Status Register */
-
-/* FIXME: verify
- * Sccording to the ST datasheet this register should be read-only, but I
- * believe that it must be R/W (printing error) */
-#define I2C_ICR			0x038	/* R Interrupt Clear Register */
-
+#define I2C_ICR			0x038	/* R/W Interrupt Clear Register */
 #define I2C_PERIPH_ID0		0xFE0	/* R Peripheral Identification Register 0 */
 #define I2C_PERIPH_ID1		0xFE4	/* R Peripheral Identification Register 1 */
 #define I2C_PERIPH_ID2		0xFE8	/* R Peripheral Identification Register 2 */
@@ -167,6 +163,11 @@
 #define I2C_INT_TXFNE		(1 << 1)	/* Tx fifo nearly empty (#) */
 #define I2C_INT_TXFE		(1 << 0)	/* Tx fifo empty (#) */
 
+/* All software-clearable interrupts (I2C_ICR) */
+#define I2C_ICR_ALL		(I2C_INT_BERR | I2C_INT_MAL | I2C_INT_STD |  \
+				 I2C_INT_MTD | I2C_INT_WTSR | I2C_INT_RFSE | \
+				 I2C_INT_RFSR | I2C_INT_TXFOVR)
+
 /* Buad-Rate counter init values (I2C kernel IP clocked @ 48MHz) */
 #define I2C_BRCR_BRCNT1_SM	240		/* Standard mode (counter #1)*/
 #define I2C_BRCR_BRCNT1_FM	80		/* Fast mode (counter #1) */
@@ -181,6 +182,10 @@ struct stn8815_i2c_dev {
 	void __iomem		*base;
 	int			irq;
 	struct i2c_adapter	*adapter;
+	struct completion	msg_complete;
+
+	u16			msg_err;	/* message errors */
+	struct i2c_msg		*msg;
 };
 
 /* Low-level register write function */
@@ -195,12 +200,12 @@ static inline u32 stn8815_i2c_rd_reg(struct stn8815_i2c_dev *dev, int reg)
 	return __raw_readl(dev->base + reg);
 }
 
-/* FIXME: useful ?
- * Clear the specified interrupt */
+/* Clear the specified interrupt */
 static inline void stn8815_i2c_clear_int(struct stn8815_i2c_dev *dev, u32 msk)
 {
 	stn8815_i2c_wr_reg(dev, I2C_ICR, msk);
 }
+
 
 /* I2C controller initialization */
 static void __devinit stn8815_i2c_hwinit(struct stn8815_i2c_dev *dev)
@@ -219,37 +224,20 @@ static void __devinit stn8815_i2c_hwinit(struct stn8815_i2c_dev *dev)
 
 	/* TODO: FIFO flushing? */
 
-	/* TODO: Program and enable interrupts */
-
-	/* FIXME: debug */
-	dev_info(dev->dev, "Control register is 0x%04X\n",
-		stn8815_i2c_rd_reg(dev, I2C_CR));
+	/* Enable interrupts: Bus-ERRor and Master-Transaction-Done */
+	stn8815_i2c_clear_int(dev, I2C_ICR_ALL);
+	stn8815_i2c_wr_reg(dev, I2C_IMSCR, I2C_INT_BERR | I2C_INT_MTD);
 }
 
-/* FIXME: temporary (move to isr)
- * Poll the i2c status register until SR.ON_GOING flag is cleared.
- * Returns 0 if timed out (100 msec).
- */
-static short stn8815_i2c_poll_status(struct stn8815_i2c_dev *dev)
-{
-	int loop_cntr = 10000;
-
-	do {
-		udelay(10);
-	} while ((stn8815_i2c_rd_reg(dev, I2C_SR) & I2C_SR_STATUS_ONGOING) && (--loop_cntr > 0));
-
-	return (loop_cntr > 0);
-}
-
-/* Wait on bus busy */
-static short stn8815_i2c_wait_on_bb(struct stn8815_i2c_dev *dev)
+/* Wait for bus release */
+static short stn8815_i2c_wait_bus_release(struct stn8815_i2c_dev *dev)
 {
 	unsigned long timeout;
 
 	timeout = jiffies + I2C_TIMEOUT;
 	while (stn8815_i2c_rd_reg(dev, I2C_SR) & I2C_SR_STATUS_ONGOING) {
 		if (time_after(jiffies, timeout)) {
-			dev_warn(dev->dev, "timeout waiting for bus ready\n");
+			dev_warn(dev->dev, "Timeout waiting for bus ready\n");
 			return -ETIMEDOUT;
 		}
 		msleep(1);
@@ -259,9 +247,41 @@ static short stn8815_i2c_wait_on_bb(struct stn8815_i2c_dev *dev)
 }
 
 /* ISR */
-static irqreturn_t stn8815_i2c_isr(int irq, void *dev)
+static irqreturn_t stn8815_i2c_isr(int irq, void *dev_id)
 {
-	/* TODO: Implement i2c ISR */
+	struct stn8815_i2c_dev *dev = dev_id;
+	struct i2c_msg *msg = dev->msg;
+	u32 misr;
+	int i;
+
+	/* Read interrupt source */
+	misr = stn8815_i2c_rd_reg(dev, I2C_MISR);
+	if ((misr & I2C_INT_MTD) != 0) {
+
+		/* Transmission succesfully completed */
+		if ((msg->flags & I2C_M_RD) != 0) {
+			/* Master read */
+			for (i = 0; i < msg->len; i++)
+				msg->buf[i] = stn8815_i2c_rd_reg(dev, I2C_RFR) & I2C_RFR_RDATA_MASK;
+		}
+
+		/* Clear interrupt (the controller will send Ack/Nack) */
+		stn8815_i2c_clear_int(dev, I2C_INT_MTD);
+	}
+	else if ((misr & I2C_INT_BERR) != 0) {
+
+		/* Transmission error */
+		dev->msg_err = (stn8815_i2c_rd_reg(dev, I2C_SR) & I2C_SR_CAUSE_MASK) >> 4;
+		stn8815_i2c_clear_int(dev, I2C_INT_BERR);
+	}
+	else {
+		/* Unknown interrupt: clear all interrupt flags */
+		stn8815_i2c_clear_int(dev, I2C_ICR_ALL);
+		return IRQ_NONE;
+	}
+
+	/* Complete */
+	complete(&dev->msg_complete);
 	return IRQ_HANDLED;
 }
 
@@ -269,8 +289,6 @@ static irqreturn_t stn8815_i2c_isr(int irq, void *dev)
 static int stn8815_i2c_xfer_rd(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 			bool stop)
 {
-	/* TODO: to be completed */
-
 	struct stn8815_i2c_dev *dev = i2c_get_adapdata(adap);
 	u32 mcr;
 	int i;
@@ -278,12 +296,10 @@ static int stn8815_i2c_xfer_rd(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 	if (pmsg->len == 0)
 		return -EINVAL;
 
-	/* FIXME: debug */
-	dev_info(dev->dev, "Read entry status SR=0x%08X, RISR=0x%08X, MISR=0x%08X, ICR=0x%08X\n",
-		stn8815_i2c_rd_reg(dev, I2C_SR),
-		stn8815_i2c_rd_reg(dev, I2C_RISR),
-		stn8815_i2c_rd_reg(dev, I2C_MISR),
-		stn8815_i2c_rd_reg(dev, I2C_ICR));
+	/* Initialize completion */
+	init_completion(&dev->msg_complete);
+	dev->msg = pmsg;
+	dev->msg_err = 0;
 
 	/* FIXME: currently only 7-bit addressing mode is supported */
 	mcr =	(pmsg->len << 15 & I2C_MCR_LENGTH_MASK) |
@@ -293,37 +309,28 @@ static int stn8815_i2c_xfer_rd(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 		I2C_MCR_OP;
 	stn8815_i2c_wr_reg(dev, I2C_MCR, mcr);
 
-	/* FIXME: debug */
-	dev_info(dev->dev, "Read request of %d bytes, MCR=0x%08X\n",
-		pmsg->len, stn8815_i2c_rd_reg(dev, I2C_MCR));
-
-	/* FIXME: temporary
-	 * Wait until transfer is finished */
-	if (!stn8815_i2c_poll_status(dev)) {
-		dev_err(dev->dev, "TXCOMP timeout\n");
+	/* Wait for completion */
+	i = wait_for_completion_timeout(&dev->msg_complete, I2C_TIMEOUT);
+	if (i < 0)
+		return i;
+	if (i == 0) {
+		dev_err(dev->dev, "Controller timeout\n");
 		return -ETIMEDOUT;
 	}
 
-	/* FIXME: debug */
-	dev_info(dev->dev, "Read exit status SR=0x%08X, RISR=0x%08X, MISR=0x%08X, ICR=0x%08X\n",
-		stn8815_i2c_rd_reg(dev, I2C_SR),
-		stn8815_i2c_rd_reg(dev, I2C_RISR),
-		stn8815_i2c_rd_reg(dev, I2C_MISR),
-		stn8815_i2c_rd_reg(dev, I2C_ICR));
+	if (likely(dev->msg_err == 0))
+		return 0;
 
-	/* FIXME: temporary, move to ISR */
-	for (i = 0; (stn8815_i2c_rd_reg(dev, I2C_RISR) & I2C_INT_RXFE) == 0; i++)
-		pmsg->buf[i] = stn8815_i2c_rd_reg(dev, I2C_RFR) & I2C_RFR_RDATA_MASK;
-
-	return 0;
+	/* There is an error */
+	/* TODO: take proper action on the controller */
+	dev_err(dev->dev, "Controller error 0x%04X\n", dev->msg_err);
+	return -EIO;
 }
 
 /* I2C master write */
 static int stn8815_i2c_xfer_wr(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 			bool stop)
 {
-	/* TODO: to be completed */
-
 	struct stn8815_i2c_dev *dev = i2c_get_adapdata(adap);
 	u32 mcr;
 	int i;
@@ -335,6 +342,11 @@ static int stn8815_i2c_xfer_wr(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 	for (i = 0; i < pmsg->len; i++)
 		stn8815_i2c_wr_reg(dev, I2C_TFR, pmsg->buf[i]);
 
+	/* Initialize completion */
+	init_completion(&dev->msg_complete);
+	dev->msg = pmsg;
+	dev->msg_err = 0;
+
 	/* FIXME: currently only 7-bit addressing mode is supported */
 	mcr =	(pmsg->len << 15 & I2C_MCR_LENGTH_MASK) |
 		(stop ? I2C_MCR_P : 0) |
@@ -342,11 +354,22 @@ static int stn8815_i2c_xfer_wr(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 		(pmsg->addr << 1 & I2C_MCR_A7_MASK);
 	stn8815_i2c_wr_reg(dev, I2C_MCR, mcr);
 
-	/* FIXME: debug */
-	dev_info(dev->dev, "Write request of %d bytes, MCR=0x%08X\n",
-		pmsg->len, stn8815_i2c_rd_reg(dev, I2C_MCR));
+	/* Wait for completion */
+	i = wait_for_completion_timeout(&dev->msg_complete, I2C_TIMEOUT);
+	if (i < 0)
+		return i;
+	if (i == 0) {
+		dev_err(dev->dev, "Controller timeout\n");
+		return -ETIMEDOUT;
+	}
 
-	return 0;
+	if (likely(dev->msg_err == 0))
+		return 0;
+
+	/* There is an error */
+	/* TODO: take proper action on the controller */
+	dev_err(dev->dev, "Controller error 0x%04X\n", dev->msg_err);
+	return -EIO;
 }
 
 /* Generic I2C master transfer entrypoint */
@@ -356,10 +379,12 @@ static int stn8815_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	struct i2c_msg *pmsg;
 	int i, r;
 	bool stop;
-	/* FIXME: temporary */
-	struct stn8815_i2c_dev *dev;
 
-	/* TODO: wait on bus busy */
+	/* Wait for bus release */
+	/* FIXME: really necessary in single master mode? */
+	r = stn8815_i2c_wait_bus_release(i2c_get_adapdata(adap));
+	if (r)
+		return r;
 
 	/* Cycle through each message */
 	for (i = 0, r = 0; i < num && !r; i++) {
@@ -369,20 +394,6 @@ static int stn8815_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			r = stn8815_i2c_xfer_rd(adap, pmsg, stop);
 		else
 			r = stn8815_i2c_xfer_wr(adap, pmsg, stop);
-
-		/* FIXME: temporary
-		 * Wait until transfer is finished */
-		dev = i2c_get_adapdata(adap);
-		if (!stn8815_i2c_poll_status(i2c_get_adapdata(adap))) {
-			dev_err(dev->dev, "TXCOMP timeout\n");
-			return -ETIMEDOUT;
-		}
-
-		/* FIXME: temporary clear MTD interrupt */
-		if ((stn8815_i2c_rd_reg(dev, I2C_RISR) & I2C_INT_MTD) != 0) {
-			stn8815_i2c_wr_reg(dev, I2C_ICR, I2C_INT_MTD);
-			dev_info(dev->dev, "Clearing MTD (I2C controller will send the ack)\n");
-		}
 	}
 
 	return r == 0 ? num : r;
@@ -391,7 +402,7 @@ static int stn8815_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 /* I2C supported functionality */
 static u32 stn8815_i2c_func(struct i2c_adapter *adap)
 {
-	/* FIXME: add more functionality as they are implemented */
+	/* TODO: add more functionality as they are implemented */
 	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
 }
 
@@ -463,7 +474,6 @@ static int __devinit stn8815_i2c_probe(struct platform_device *pdev)
 		err = -ENOMEM;
 		goto err_free_adap;
 	}
-	/* TODO: devinfo here */
 
 	/* Setup I2C adapter */
 	adap->owner = THIS_MODULE;
@@ -471,7 +481,7 @@ static int __devinit stn8815_i2c_probe(struct platform_device *pdev)
 	strlcpy(adap->name, "STN8815 I2C adapter", sizeof(adap->name));
 	adap->algo = &stn8815_i2c_algo;
 	adap->dev.parent = &pdev->dev;
-	adap->nr = pdev->id;	/* FIXME: what's this? */
+	adap->nr = pdev->id;
 	i2c_set_adapdata(adap, dev);
 
 	err = i2c_add_numbered_adapter(adap);
@@ -480,6 +490,7 @@ static int __devinit stn8815_i2c_probe(struct platform_device *pdev)
 		goto err_free_irq;
 	}
 
+	/* TODO: verbose devinfo here (master mode, speed, address bit) */
 	dev_info(&pdev->dev, "STN8815 I2C bus driver ok\n");
 	return 0;
 
