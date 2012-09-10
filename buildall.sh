@@ -41,13 +41,18 @@ done
 
 #### Make and install tools
 cd $PRJDIR/tools
-printf "\n*** Building tools...\n"
-build_tools
-cd $PRJDIR
+for n in `ls -1`; do
+	if test -d $n; then
+		printf "\n*** Building tools $n...\n"
+		cd $n
+		build_tools
+		cd ..
+	fi
+done
 
 #### Copy scripts
 cd $PRJDIR/scripts
-printf "\n*** Copying tools...\n"
+printf "\n*** Copying scripts...\n"
 for n in `ls -1`; do
 	echo "  $n"
 	sudo cp $n $ROOTFS
