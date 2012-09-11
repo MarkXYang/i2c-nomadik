@@ -94,7 +94,9 @@
 #define	I2C_MCR_EA10_MASK	(7 << 8)	/* Extended 10-bit address */
 #define I2C_MCR_A7_MASK		(0x7F << 1)	/* 7-bit address */
 #define I2C_MCR_A10_MASK	(I2C_MCR_A7_MASK | I2C_MCR_EA10_MASK)
-#define	I2C_MCR_OP		(1 << 0)	/* Operation: Wr(0) Rd(1) */
+#define	I2C_MCR_OP_MASK		(1 << 0)	/* Operation: Wr(0) Rd(1) */
+#define	I2C_MCR_OP_WR		(0 << 0)	/*   Write */
+#define	I2C_MCR_OP_RD		(1 << 0)	/*   Read  */
 
 /* Transmit FIFO Register (I2C_TFR) */
 #define I2C_TFR_TDATA_MASK	0xFF		/* Transmission data */
@@ -301,12 +303,13 @@ static int stn8815_i2c_xfer_rd(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 	dev->msg = pmsg;
 	dev->msg_err = 0;
 
-	/* FIXME: currently only 7-bit addressing mode is supported */
-	mcr =	(pmsg->len << 15 & I2C_MCR_LENGTH_MASK) |
-		(stop ? I2C_MCR_P : 0) |
-		I2C_MCR_AM_A7 |
-		(pmsg->addr << 1 & I2C_MCR_A7_MASK) |
-		I2C_MCR_OP;
+	/* Set up the master transmission parameters */
+	mcr = (pmsg->len << 15 & I2C_MCR_LENGTH_MASK) |	/* message length */
+	      (stop ? I2C_MCR_P : 0) |			/* stop bit */
+	      I2C_MCR_OP_RD |				/* read operation */
+	      (pmsg->flags & I2C_M_TEN ?		/* slave address */
+		I2C_MCR_AM_A10 | (pmsg->addr << 1 & I2C_MCR_A10_MASK) :
+		I2C_MCR_AM_A7 | (pmsg->addr << 1 & I2C_MCR_A7_MASK));
 	stn8815_i2c_wr_reg(dev, I2C_MCR, mcr);
 
 	/* Wait for completion */
@@ -347,11 +350,13 @@ static int stn8815_i2c_xfer_wr(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 	dev->msg = pmsg;
 	dev->msg_err = 0;
 
-	/* FIXME: currently only 7-bit addressing mode is supported */
-	mcr =	(pmsg->len << 15 & I2C_MCR_LENGTH_MASK) |
-		(stop ? I2C_MCR_P : 0) |
-		I2C_MCR_AM_A7 |
-		(pmsg->addr << 1 & I2C_MCR_A7_MASK);
+	/* Set up the master transmission parameters */
+	mcr = (pmsg->len << 15 & I2C_MCR_LENGTH_MASK) |	/* message length */
+	      (stop ? I2C_MCR_P : 0) |			/* stop bit */
+	      I2C_MCR_OP_WR |				/* write operation */
+	      (pmsg->flags & I2C_M_TEN ?		/* slave address */
+		I2C_MCR_AM_A10 | (pmsg->addr << 1 & I2C_MCR_A10_MASK) :
+		I2C_MCR_AM_A7 | (pmsg->addr << 1 & I2C_MCR_A7_MASK));
 	stn8815_i2c_wr_reg(dev, I2C_MCR, mcr);
 
 	/* Wait for completion */
