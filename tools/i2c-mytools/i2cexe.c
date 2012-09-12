@@ -167,6 +167,8 @@ int main(int argc, char *argv[])
 			res = i2c_smbus_read_byte(file);
 			if (res < 0)
 				fprintf(stderr, "Error: read slave address 0x%02X failed\n", addr);
+			else
+				fprintf(stdout, "0x%02X\n", res);
 		}
 	}
 
