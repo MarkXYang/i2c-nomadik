@@ -29,6 +29,13 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 
+#include <mach/i2c-stn8815.h>
+
+
+/* Driver name and version */
+#define DRIVER_NAME 	"stn8815_i2c"
+#define DRIVER_VERSION	"1.0"
+
 
 /* I2C register map */
 #define	I2C_CR			0x000	/* R/W Control Register */
@@ -188,7 +195,36 @@ struct stn8815_i2c_dev {
 
 	u16			msg_err;	/* message errors */
 	struct i2c_msg		*msg;
+
+	/* platform data */
+	unsigned char		speed;
+	unsigned char		filter;
 };
+
+/* STN8815-I2C platform data default */
+static struct i2c_stn8815_platform_data nhk8815_i2c_default_init = {
+	.filter	= I2C_STN8815_FILTER_NONE,
+	.speed	= I2C_STN8815_SPEED_STANDARD,
+	.master_code = 0,
+};
+
+/* Speed mode description messages */
+static const char *speed_desc[] = {
+	"standard mode (100 Kb/s)",
+	"fast mode (400 Kb/s)",
+	"high-speed mode (3.4 Mb/s)",
+	""
+};
+#define	get_speed_desc(x)	(speed_desc[x])
+
+/* Digital filter description messages */
+static const char *filter_desc[] = {
+	"no",
+	"1 clock-wide-spikes",
+	"2 clock-wide-spikes",
+	"3 clock-wide-spikes"
+};
+#define	get_filter_desc(x)	(filter_desc[x])
 
 /* Low-level register write function */
 static inline void stn8815_i2c_wr_reg(struct stn8815_i2c_dev *dev, int reg, u32 val)
@@ -208,21 +244,37 @@ static inline void stn8815_i2c_clear_int(struct stn8815_i2c_dev *dev, u32 msk)
 	stn8815_i2c_wr_reg(dev, I2C_ICR, msk);
 }
 
-
 /* I2C controller initialization */
 static void __devinit stn8815_i2c_hwinit(struct stn8815_i2c_dev *dev)
 {
-	u32 br;
+	u32 reg;
+	struct i2c_stn8815_platform_data *pdata;
 
-	/* Program the Baud-Rate for standard mode and high-speed mode */
-	br = (I2C_BRCR_BRCNT2_HS << 16) | I2C_BRCR_BRCNT1_SM;
-	stn8815_i2c_wr_reg(dev, I2C_BRCR, br);
+	/* Get platform data: if not provided use defaults */
+	pdata = dev->dev->platform_data;
+	if (!pdata) {
+		dev_info(dev->dev, "no platform data, using defaults\n");
+		pdata = &nhk8815_i2c_default_init;
+	}
+	dev->speed = pdata->speed & I2C_STN8815_SPEED_MASK;
+	dev->filter = pdata->filter & I2C_STN8815_FILTER_MASK;
+
+	/* Program the Baud-Rate */
+	reg = (pdata->speed == I2C_STN8815_SPEED_FAST ?
+		(I2C_BRCR_BRCNT2_HS << 16) | I2C_BRCR_BRCNT1_FM :
+		(I2C_BRCR_BRCNT2_HS << 16) | I2C_BRCR_BRCNT1_SM);
+	stn8815_i2c_wr_reg(dev, I2C_BRCR, reg);
+
+	/* Set up the high-speed master code */
+	reg = pdata->master_code & I2C_HSMCR_MC_MASK;
+	stn8815_i2c_wr_reg(dev, I2C_HSMCR, reg);
 
 	/* Program the controller */
-	stn8815_i2c_wr_reg(dev, I2C_CR,
-			I2C_CR_SM_STANDARD |	/* standard mode */
-			I2C_CR_OM_MASTER |	/* single master */
-			I2C_CR_PE);		/* enable the peripheral */
+	reg = (dev->filter << 13) |		/* digital filter */
+	      (dev->speed << 4 ) |		/* speed mode */
+	       I2C_CR_OM_MASTER |		/* single master */
+	       I2C_CR_PE;			/* peripheral enable */
+	stn8815_i2c_wr_reg(dev, I2C_CR, reg);
 
 	/* TODO: FIFO flushing? */
 
@@ -459,7 +511,7 @@ static int __devinit stn8815_i2c_probe(struct platform_device *pdev)
 		err = -ENOMEM;
 		goto err_free_mem;
 	}
-	dev->dev = &pdev->dev;
+	dev->dev = &pdev->dev;	/* or: dev->dev = get_device(&pdev->dev); */
 	dev->irq = irq->start;
 	adap = kzalloc(sizeof(struct i2c_adapter), GFP_KERNEL);
 	if (!adap) {
@@ -495,8 +547,10 @@ static int __devinit stn8815_i2c_probe(struct platform_device *pdev)
 		goto err_free_irq;
 	}
 
-	/* TODO: verbose devinfo here (master mode, speed, address bit) */
-	dev_info(&pdev->dev, "STN8815 I2C bus driver ok\n");
+	dev_info(dev->dev, "bus %d, rev %s, %s, %s filter\n", pdev->id,
+		DRIVER_VERSION, get_speed_desc(dev->speed),
+		get_filter_desc(dev->filter));
+
 	return 0;
 
 err_free_irq:
@@ -543,7 +597,7 @@ static struct platform_driver stn8815_i2c_driver = {
 	.probe		= stn8815_i2c_probe,
 	.remove		= __devexit_p(stn8815_i2c_remove),
 	.driver		= {
-		.name	= "stn8815_i2c",
+		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
 	},
 };
@@ -554,4 +608,5 @@ module_platform_driver(stn8815_i2c_driver);
 MODULE_DESCRIPTION("NOMADIK STN8815 I2C bus adapter");
 MODULE_AUTHOR("Fabrizio Ghiringhelli <fghiro@gmail.com>");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("platform:stn8815_i2c");
+MODULE_VERSION(DRIVER_VERSION);
+MODULE_ALIAS("platform:" DRIVER_NAME);
