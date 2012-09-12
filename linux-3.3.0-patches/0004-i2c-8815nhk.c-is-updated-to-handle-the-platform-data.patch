@@ -1,0 +1,94 @@
+From 4f5d1dc652dcbd3e6a56627328a4612bd848e3ea Mon Sep 17 00:00:00 2001
+From: Fabrizio Ghiringhelli <fghiro@gmail.com>
+Date: Wed, 12 Sep 2012 11:47:33 +0200
+Subject: [PATCH] 'i2c-8815nhk.c' is updated to handle the platform data of the
+ STN8815 I2C adapter. Use custom data for bus 0 and default data
+ for bus 1.
+
+---
+ arch/arm/mach-nomadik/i2c-8815nhk.c              |   30 ++++++++++++++--------
+ arch/arm/mach-nomadik/include/mach/i2c-stn8815.h |    1 +
+ 2 files changed, 20 insertions(+), 11 deletions(-)
+ create mode 120000 arch/arm/mach-nomadik/include/mach/i2c-stn8815.h
+
+diff --git a/arch/arm/mach-nomadik/i2c-8815nhk.c b/arch/arm/mach-nomadik/i2c-8815nhk.c
+index d5d76fb..1aa8db3 100644
+--- a/arch/arm/mach-nomadik/i2c-8815nhk.c
++++ b/arch/arm/mach-nomadik/i2c-8815nhk.c
+@@ -16,6 +16,8 @@
+ #include <mach/irqs.h>
+ #include <plat/gpio-nomadik.h>
+ 
++#include <mach/i2c-stn8815.h>
++
+ /*
+  * There are two busses in the 8815NHK.
+  * They can be driven either by the hardware component, or by bit-bang through
+@@ -95,11 +97,20 @@ static struct resource nhk8815_i2c_resources[] = {
+ };
+ 
+ /* first bus: i2c0 */
++static struct i2c_stn8815_platform_data nhk8815_i2c_dev0_data = {
++	.filter	= I2C_STN8815_FILTER_1_CLK,	/* 1 clock-wide-spikes filter */
++	.speed	= I2C_STN8815_SPEED_FAST,	/* fast mode (up to 400Kb/s)  */
++	.master_code = 0,
++};
++
+ static struct platform_device nhk8815_i2c_dev0 = {
+ 	.name		= "stn8815_i2c",
+ 	.id		= 0,
+ 	.resource	= &nhk8815_i2c_resources[0],
+ 	.num_resources	= 2,
++	.dev		= {
++		.platform_data	= &nhk8815_i2c_dev0_data,
++	},
+ };
+ 
+ /* second bus: i2c1 */
+@@ -108,27 +119,24 @@ static struct platform_device nhk8815_i2c_dev1 = {
+ 	.id		= 1,
+ 	.resource	= &nhk8815_i2c_resources[2],
+ 	.num_resources	= 2,
++	/* No platform data: use driver defaults */
+ };
+ 
+ static int __init nhk8815_i2c_init(void)
+ {
+ 	int err;
+ 
+-	/* FIXME: debug */
+-	err = nmk_gpio_set_mode(I2C_SCL0_PIN, NMK_GPIO_ALT_A);
+-	if (err != 0)
+-		printk(KERN_ERR "I2C: error on setting scl0 pin mode\n");
+-	else
+-		printk(KERN_ERR "I2C: scl0 pin mode set to 0x%02X\n",
+-			nmk_gpio_get_mode(I2C_SCL0_PIN));
+-
+-	nmk_gpio_set_mode(I2C_SDA0_PIN, NMK_GPIO_ALT_A);
++	err = 	nmk_gpio_set_mode(I2C_SCL0_PIN, NMK_GPIO_ALT_A) +
++		nmk_gpio_set_mode(I2C_SDA0_PIN, NMK_GPIO_ALT_A);
+ 	platform_device_register(&nhk8815_i2c_dev0);
+ 
+-	nmk_gpio_set_mode(I2C_SCL1_PIN, NMK_GPIO_ALT_A);
+-	nmk_gpio_set_mode(I2C_SDA1_PIN, NMK_GPIO_ALT_A);
++	err +=	nmk_gpio_set_mode(I2C_SCL1_PIN, NMK_GPIO_ALT_A) +
++		nmk_gpio_set_mode(I2C_SDA1_PIN, NMK_GPIO_ALT_A);
+ 	platform_device_register(&nhk8815_i2c_dev1);
+ 
++	if (err != 0)
++		printk(KERN_ERR "I2C: error on setting pin mode\n");
++
+ 	return 0;
+ }
+ arch_initcall(nhk8815_i2c_init);
+diff --git a/arch/arm/mach-nomadik/include/mach/i2c-stn8815.h b/arch/arm/mach-nomadik/include/mach/i2c-stn8815.h
+new file mode 120000
+index 0000000..27f030a
+--- /dev/null
++++ b/arch/arm/mach-nomadik/include/mach/i2c-stn8815.h
+@@ -0,0 +1 @@
++/home/fabri/nomadik/project/drivers/i2c-stn8815/i2c-stn8815.h
+\ No newline at end of file
+-- 
+1.7.4.1
+
