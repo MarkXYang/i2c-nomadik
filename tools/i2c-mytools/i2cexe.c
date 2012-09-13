@@ -188,6 +188,6 @@ int main(int argc, char *argv[])
 	}
 
 	close(file);
-	return res ? 1 : 0;
+	return res < 0 ? res : 0;
 }
 
