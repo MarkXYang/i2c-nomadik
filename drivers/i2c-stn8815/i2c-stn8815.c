@@ -261,6 +261,32 @@ static inline void stn8815_i2c_disable(struct stn8815_i2c_dev *dev)
 	stn8815_i2c_wr_reg(dev, I2C_CR, cr);
 }
 
+/* Rx and Tx FIFO flushing */
+static inline short stn8815_i2c_fifo_flush(struct stn8815_i2c_dev *dev)
+{
+	u32 cr;
+	int loop_cntr = 1000;
+
+	/* Start flushing Rx and Tx FIFOs */
+	cr = stn8815_i2c_rd_reg(dev, I2C_CR);
+	cr |= I2C_CR_FRX | I2C_CR_FTX;
+	stn8815_i2c_wr_reg(dev, I2C_CR, cr);
+
+	/* Wait for completion */
+	do {
+		udelay(10);
+		loop_cntr--;
+	} while (stn8815_i2c_rd_reg(dev, I2C_CR) & (I2C_CR_FRX | I2C_CR_FTX) &&
+		 loop_cntr > 0);
+
+	/* Check exit status */
+	if (loop_cntr <= 0) {
+		dev_warn(dev->dev, "Timeout waiting for fifo flushing\n");
+		return -ETIMEDOUT;
+	}
+	return 0;
+}
+
 /* I2C controller initialization */
 static void __devinit stn8815_i2c_hwinit(struct stn8815_i2c_dev *dev)
 {
@@ -293,7 +319,8 @@ static void __devinit stn8815_i2c_hwinit(struct stn8815_i2c_dev *dev)
 	       I2C_CR_PE;			/* peripheral enable */
 	stn8815_i2c_wr_reg(dev, I2C_CR, reg);
 
-	/* TODO: FIFO flushing? */
+	/* Rx and Tx FIFO flushing */
+	stn8815_i2c_fifo_flush(dev);
 
 	/* Enable interrupts: Bus-ERRor and Master-Transaction-Done */
 	stn8815_i2c_clear_int(dev, I2C_ICR_ALL);
