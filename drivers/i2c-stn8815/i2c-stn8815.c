@@ -28,6 +28,7 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
+#include <linux/pm_runtime.h>
 
 #include <mach/i2c-stn8815.h>
 
@@ -244,6 +245,22 @@ static inline void stn8815_i2c_clear_int(struct stn8815_i2c_dev *dev, u32 msk)
 	stn8815_i2c_wr_reg(dev, I2C_ICR, msk);
 }
 
+/* Enable the controller */
+static inline void stn8815_i2c_enable(struct stn8815_i2c_dev *dev)
+{
+	u32 cr = stn8815_i2c_rd_reg(dev, I2C_CR);
+	cr |= I2C_CR_PE;
+	stn8815_i2c_wr_reg(dev, I2C_CR, cr);
+}
+
+/* Disable the controller */
+static inline void stn8815_i2c_disable(struct stn8815_i2c_dev *dev)
+{
+	u32 cr = stn8815_i2c_rd_reg(dev, I2C_CR);
+	cr &= ~I2C_CR_PE;
+	stn8815_i2c_wr_reg(dev, I2C_CR, cr);
+}
+
 /* I2C controller initialization */
 static void __devinit stn8815_i2c_hwinit(struct stn8815_i2c_dev *dev)
 {
@@ -307,6 +324,10 @@ static irqreturn_t stn8815_i2c_isr(int irq, void *dev_id)
 	struct i2c_msg *msg = dev->msg;
 	u32 misr;
 	int i;
+
+	/* Check the adapter suspend status */
+	if (pm_runtime_suspended(dev->dev))
+		return IRQ_NONE;
 
 	/* Read interrupt source */
 	misr = stn8815_i2c_rd_reg(dev, I2C_MISR);
@@ -433,15 +454,19 @@ static int stn8815_i2c_xfer_wr(struct i2c_adapter *adap, struct i2c_msg *pmsg,
 static int stn8815_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			int num)
 {
+	struct stn8815_i2c_dev *dev = i2c_get_adapdata(adap);
 	struct i2c_msg *pmsg;
 	int i, r;
 	bool stop;
+
+	/* Power management: increment device usage counter */
+	pm_runtime_get_sync(dev->dev);
 
 	/* Wait for bus release */
 	/* FIXME: really necessary in single master mode? */
 	r = stn8815_i2c_wait_bus_release(i2c_get_adapdata(adap));
 	if (r)
-		return r;
+		goto out;
 
 	/* Cycle through each message */
 	for (i = 0, r = 0; i < num && !r; i++) {
@@ -452,6 +477,10 @@ static int stn8815_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 		else
 			r = stn8815_i2c_xfer_wr(adap, pmsg, stop);
 	}
+
+out:
+	/* Power management: decrement device usage counter */
+	pm_runtime_put(dev->dev);
 
 	return r == 0 ? num : r;
 }
@@ -521,6 +550,10 @@ static int __devinit stn8815_i2c_probe(struct platform_device *pdev)
 	}
 	dev->adapter = adap;
 
+	/* Power management: enable device and increment device usage counter */
+	pm_runtime_enable(dev->dev);
+	pm_runtime_get_sync(dev->dev);
+
 	/* Initialize I2C controller */
 	stn8815_i2c_hwinit(dev);
 
@@ -531,6 +564,9 @@ static int __devinit stn8815_i2c_probe(struct platform_device *pdev)
 		err = -ENOMEM;
 		goto err_free_adap;
 	}
+
+	/* Power management: decrement device usage counter */
+	pm_runtime_put(dev->dev);
 
 	/* Setup I2C adapter */
 	adap->owner = THIS_MODULE;
@@ -558,6 +594,7 @@ err_free_irq:
 
 err_free_adap:
 	kfree(adap);
+	pm_runtime_put(dev->dev);
 
 err_io_unmap:
 	iounmap(dev->base);
@@ -593,17 +630,45 @@ static int __devexit stn8815_i2c_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_RUNTIME
+/* Runtime suspend */
+static int stn8815_i2c_runtime_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct stn8815_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
+
+	stn8815_i2c_disable(i2c_dev);	/* Disable the controller */
+	return 0;
+}
+
+/* Runtime resume */
+static int stn8815_i2c_runtime_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct stn8815_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
+
+	stn8815_i2c_enable(i2c_dev);	/* Enable the controller */
+	return 0;
+}
+#endif	/* CONFIG_PM_RUNTIME */
+
+static const struct dev_pm_ops stn8815_i2c_pm_ops = {
+	SET_RUNTIME_PM_OPS(stn8815_i2c_runtime_suspend,
+			   stn8815_i2c_runtime_resume,
+			   NULL)
+};
+
 static struct platform_driver stn8815_i2c_driver = {
 	.probe		= stn8815_i2c_probe,
 	.remove		= __devexit_p(stn8815_i2c_remove),
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
+		.pm	= &stn8815_i2c_pm_ops,
 	},
 };
 
 module_platform_driver(stn8815_i2c_driver);
-
 
 MODULE_DESCRIPTION("NOMADIK STN8815 I2C bus adapter");
 MODULE_AUTHOR("Fabrizio Ghiringhelli <fghiro@gmail.com>");
