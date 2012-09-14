@@ -165,7 +165,7 @@ static const unsigned int odrs[] = { 40, 160, 640, 2560 };
 
 /* LIS3LV02D default configuration */
 static const struct lis3lv02d_nhk8815_platform_data lis3lv02d_default_init = {
-	.device_cfg = 0,	/* currently the scale is not supported :-( */
+	.device_cfg = LIS3_ODR_40HZ,	/* currently the scale is not supported :-( */
 	.poll_interval = 500,
 	.free_fall_cfg = LIS3_FF_XL | LIS3_FF_YL | LIS3_FF_ZL,
 	.free_fall_threshold = 600,
@@ -244,7 +244,7 @@ static int __lis3lv02d_poweron(struct lis3lv02d_priv *priv)
 	int err;
 
 	/* Turn on the sensor and enable XYZ axis */
-	odrbit = priv->pdata->device_cfg & 0x30;
+	odrbit = priv->pdata->device_cfg & LIS3_ODR_MASK;
 	reg = odrbit | CTRL1_PD0 | CTRL1_Xen | CTRL1_Yen | CTRL1_Zen;
 	err = __lis3lv02d_byte_write(client, CTRL_REG1, reg);
 	if (err < 0)
@@ -323,6 +323,8 @@ static int __lis3lv02d_read_axis(struct lis3lv02d_priv *priv,
 }
 
 /* == sysfs == */
+static int lis3lv02d_poll_enable(struct lis3lv02d_priv *priv);
+static void lis3lv02d_poll_disable(struct lis3lv02d_priv *priv);
 /* Show acceleration along x,y,z axis */
 static ssize_t lis3lv02d_position_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -388,7 +390,7 @@ static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, lis3lv02d_enable_show,
 		lis3lv02d_enable_store);
 
 /* Show the Free-Fall enable/disable status */
-static ssize_t lis3lv02d_ffenable_show(struct device *dev,
+static ssize_t lis3lv02d_ff_enable_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct lis3lv02d_priv *priv = dev_get_drvdata(dev);
@@ -396,7 +398,40 @@ static ssize_t lis3lv02d_ffenable_show(struct device *dev,
 	return sprintf(buf,"%c\n", priv->ff_enabled ? 'y' : 'n');
 }
 
-static DEVICE_ATTR(ffenable, S_IRUGO, lis3lv02d_ffenable_show, NULL);
+static DEVICE_ATTR(ff_enable, S_IRUGO, lis3lv02d_ff_enable_show, NULL);
+
+/* Show the polling enable/disable status */
+static ssize_t lis3lv02d_poll_enable_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct lis3lv02d_priv *priv = dev_get_drvdata(dev);
+
+	return sprintf(buf,"%c\n", priv->input_polled ? 'y' : 'n');
+}
+
+/* Write the polling enable/disable status */
+static ssize_t lis3lv02d_poll_enable_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct lis3lv02d_priv *priv = dev_get_drvdata(dev);
+	unsigned int val;
+	int err;
+
+	err = kstrtouint(buf, 10, &val);
+	if (err)
+		return err;
+
+	if (val)
+		err = lis3lv02d_poll_enable(priv);
+	else
+		lis3lv02d_poll_disable(priv);
+
+	return err < 0 ? err : count;
+}
+
+static DEVICE_ATTR(poll_enable, S_IRUGO | S_IWUSR, lis3lv02d_poll_enable_show,
+		lis3lv02d_poll_enable_store);
 
 #ifdef LIS3LV02D_DEBUG
 /* Show the LIS3LV02D register last read */
@@ -462,7 +497,8 @@ static DEVICE_ATTR(write, S_IWUSR, NULL, lis3lv02d_write_store);
 static struct attribute *lis3lv02d_attributes[] = {
 	&dev_attr_position.attr,
 	&dev_attr_enable.attr,
-	&dev_attr_ffenable.attr,
+	&dev_attr_ff_enable.attr,
+	&dev_attr_poll_enable.attr,
 #ifdef LIS3LV02D_DEBUG
 	&dev_attr_read.attr,
 	&dev_attr_write.attr,
@@ -611,26 +647,105 @@ out:
 	return IRQ_HANDLED;
 }
 
+/* Enable the device polling.
+ * Register the device as a polled input with the input subsystem
+ */
+static int lis3lv02d_poll_enable(struct lis3lv02d_priv *priv)
+{
+	struct input_polled_dev *input_polled;
+	struct input_dev *input;
+	int err;
+
+	if (priv->input_polled)
+		return -EINVAL;		/* polling is already enable */
+
+	/* Allocate memory for the input device */
+	input_polled = input_allocate_polled_device();
+	if (!input_polled) {
+		dev_err(&priv->client->dev, "failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	/* Setup input parameters */
+	input_polled->open = lis3lv02d_open;
+	input_polled->close = lis3lv02d_close;
+	input_polled->poll = lis3lv02d_poll;
+	input_polled->poll_interval = priv->pdata->poll_interval;
+	input_polled->poll_interval_min = 0;
+	input_polled->poll_interval_max = 2 * priv->pdata->poll_interval;
+	input_polled->private = priv;
+
+	input = input_polled->input;
+	input->name = "LIS3LV02D accelerometer";
+	input->phys = DEVICE_NAME "/input0";
+	input->dev.parent = &priv->client->dev;
+	input->id.bustype = BUS_I2C;
+	input->id.product = 0;
+
+	/* Setup ABS input events */
+	set_bit(EV_ABS, input->evbit);
+	set_bit(ABS_X, input->absbit);
+	set_bit(ABS_Y, input->absbit);
+	set_bit(ABS_Z, input->absbit);
+
+	input_set_abs_params(input, ABS_X, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
+	input_set_abs_params(input, ABS_Y, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
+	input_set_abs_params(input, ABS_Z, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
+
+	/* Setup KEY event for free-fall (only if enabled) */
+	if (priv->ff_enabled) {
+		set_bit(EV_KEY, input->evbit);
+		set_bit(KEY_FREE_FALL, input->keybit);
+	}
+
+	/* Register input polled device */
+	err = input_register_polled_device(input_polled);
+	mutex_lock(&priv->mutex);
+	if (err) {
+		input_free_polled_device(input_polled);
+		priv->input_polled = NULL;
+	}
+	else {
+		priv->input_polled = input_polled;
+	}
+	mutex_unlock(&priv->mutex);
+
+	return err;
+}
+
+/* Disable the device polling.
+ * Unregister the device with the input subsystem
+ */
+static void lis3lv02d_poll_disable(struct lis3lv02d_priv *priv)
+{
+	if (!priv->input_polled)
+		return;		/* polling is already disabled */
+
+	/* Unregister input device */
+	input_unregister_polled_device(priv->input_polled);
+	input_free_polled_device(priv->input_polled);
+
+	mutex_lock(&priv->mutex);
+	priv->input_polled = NULL;
+	mutex_unlock(&priv->mutex);
+}
+
 /* Probe function */
 static int lis3lv02d_probe(struct i2c_client *client,
 		const struct i2c_device_id *idp)
 {
 	struct lis3lv02d_priv *priv;
 	const struct lis3lv02d_nhk8815_platform_data *pdata;
-	struct input_polled_dev *input_polled;
-	struct input_dev *input;
 	int err;
 
-	/* Allocate memory for the LIS3LV02D and input device */
+	/* Allocate memory for the LIS3LV02D device */
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	input_polled = input_allocate_polled_device();
-	if (!priv || !input_polled) {
+	if (!priv) {
 		dev_err(&client->dev, "failed to allocate memory\n");
 		err = -ENOMEM;
 		goto err_free_mem;
 	}
 	priv->client = client;
-	priv->input_polled = input_polled;
 
 	/* Save pointer to platform data */
 	pdata = client->dev.platform_data;
@@ -667,36 +782,10 @@ static int lis3lv02d_probe(struct i2c_client *client,
 	if (err < 0)
 		goto err_sysfs_remove;
 
-	/* Configure the sensor (mostly interrut stuff) */
+	/* Configure the sensor (mostly interrupt stuff) */
 	err = lis3lv02d_configure(priv);
 	if (err < 0)
 		goto err_sysfs_remove;
-
-	/* Setup input parameters */
-	input_polled->open = lis3lv02d_open;
-	input_polled->close = lis3lv02d_close;
-	input_polled->poll = lis3lv02d_poll;
-	input_polled->poll_interval = pdata->poll_interval;
-	input_polled->poll_interval_min = 0;
-	input_polled->poll_interval_max = 2 * pdata->poll_interval;
-	input_polled->private = priv;
-
-	input = input_polled->input;
-	input->name = "LIS3LV02D accelerometer";
-	input->phys = DEVICE_NAME "/input0";
-	input->dev.parent = &client->dev;
-	input->id.bustype = BUS_I2C;
-	input->id.product = 0;
-
-	/* Setup ABS input events */
-	set_bit(EV_ABS, input->evbit);
-	set_bit(ABS_X, input->absbit);
-	set_bit(ABS_Y, input->absbit);
-	set_bit(ABS_Z, input->absbit);
-
-	input_set_abs_params(input, ABS_X, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
-	input_set_abs_params(input, ABS_Y, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
-	input_set_abs_params(input, ABS_Z, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
 
 	/* Get IRQ */
 	if (pdata->free_fall_cfg & LIS3_FF_ALL) {
@@ -728,16 +817,14 @@ static int lis3lv02d_probe(struct i2c_client *client,
 		 */
 		priv->ff_enabled = true;
 		dev_info(&client->dev, "Free-Fall detection enabled\n");
-
-		/* Setup KEY event for free-fall */
-		set_bit(EV_KEY, input->evbit);
-		set_bit(KEY_FREE_FALL, input->keybit);
 	}
 
-	/* Register input device */
-	err = input_register_polled_device(input_polled);
-	if (err)
-		goto err_free_irq;
+	/* Enable input polling */
+	if (pdata->device_cfg & LIS3_EPOLL) {
+		err = lis3lv02d_poll_enable(priv);
+		if (err)
+			goto err_free_irq;
+	}
 
 	return 0;
 
@@ -749,7 +836,6 @@ static int lis3lv02d_probe(struct i2c_client *client,
 	lis3lv02d_sysfs_remove(priv);
 
  err_free_mem:
-	input_free_polled_device(input_polled);
 	kfree(priv);
 
 	return err;
@@ -770,7 +856,7 @@ static int __devexit lis3lv02d_remove(struct i2c_client *client)
 		free_irq(client->irq, priv);
 
 	/* Unregister input device */
-	input_unregister_polled_device(priv->input_polled);
+	lis3lv02d_poll_disable(priv);
 
 	/* Free memory */
 	kfree(priv);

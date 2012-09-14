@@ -28,18 +28,26 @@ struct lis3lv02d_nhk8815_platform_data {
 
 	/*
 	 * device_cfg:
-	 * holds the device configuration:
-	 *   DF0, DF1: define the Output Data Rate (ODR):
-	 *             DF0 = 0, DF1 = 0 -->  ODR = 40Hz
-	 *             DF0 = 1, DF1 = 0 -->  ODR = 160Hz
-	 *             DF0 = 0, DF1 = 1 -->  ODR = 640Hz
-	 *             DF0 = 1, DF1 = 1 -->  ODR = 2560Hz
+	 * holds the device configuration
+	 *   EPOLL: A '1' = enable the input polling
+	 *   ODR0, ODR1: Output Data Rate (ODR):
+	 *             ODR0 = 0, ODR1 = 0 -->  ODR = 40Hz
+	 *             ODR0 = 1, ODR1 = 0 -->  ODR = 160Hz
+	 *             ODR0 = 0, ODR1 = 1 -->  ODR = 640Hz
+	 *             ODR0 = 1, ODR1 = 1 -->  ODR = 2560Hz
 	 *   FULLSCALE: A '0' = 2g and a '1' = 6g
 	 */
 
-#define	LIS3_DF0	(1 << 4)
-#define	LIS3_DF1	(1 << 5)
+#define LIS3_EPOLL	(1 << 0)
+#define	LIS3_ODR0	(1 << 4)
+#define	LIS3_ODR1	(1 << 5)
 #define LIS3_FULLSCALE	(1 << 7)
+
+#define LIS3_ODR_MASK	(LIS3_ODR0 | LIS3_ODR1)
+#define LIS3_ODR_40HZ	(0 << 4)
+#define LIS3_ODR_160HZ	(1 << 4)
+#define LIS3_ODR_640HZ	(2 << 4)
+#define LIS3_ODR_2560HZ	(3 << 4)
 
 	unsigned char device_cfg;
 
