@@ -148,9 +148,11 @@
 
 /* Device and driver names */
 #define	DEVICE_NAME		"lis3lv02d"
-#define	DRIVER_NAME		"lis3lv02d-nhk8815"	/* Driver's name (must
-							 * match module name) */
+#define	DRIVER_NAME		"lis3lv02d-nhk8815" /* must match module name */
+#define DRIVER_VERSION		"1.0"
+
 /* LIS3LV02D sensitivity [LSB/g] */
+#define SCALE			1000	/* all measures are expressed in mg */
 #define SENSITIVITY_2G		1024	/* range = +-2g */
 #define	SENSITIVITY_6G		340	/* range = +-6g */
 #define FULLRES_MAX_VAL		2048	/* 11 bit (12th bit is used for sign) */
@@ -165,7 +167,7 @@ static const unsigned int odrs[] = { 40, 160, 640, 2560 };
 
 /* LIS3LV02D default configuration */
 static const struct lis3lv02d_nhk8815_platform_data lis3lv02d_default_init = {
-	.device_cfg = LIS3_ODR_40HZ,	/* currently the scale is not supported :-( */
+	.device_cfg = LIS3_ODR_40HZ | LIS3_FS_2G,
 	.poll_interval = 500,
 	.free_fall_cfg = LIS3_FF_XL | LIS3_FF_YL | LIS3_FF_ZL,
 	.free_fall_threshold = 600,
@@ -188,11 +190,28 @@ struct lis3lv02d_priv {
 
 	bool powered;
 	bool ff_enabled;
+	int sensitivity;
 
 #ifdef LIS3LV02D_DEBUG
 	u8 reg_val;
 #endif
 };
+
+/* Output Data Rate description strings */
+static const char *odr_desc[] = {
+	"40Hz",
+	"160Hz",
+	"640Hz",
+	"2560Hz"
+};
+#define	get_odr_desc(x)	(odr_desc[x])
+
+/* Full-scale description strings */
+static const char *fs_desc[] = {
+	"+/-2g",
+	"+/-6g"
+};
+#define	get_fs_desc(x)	(fs_desc[x])
 
 /* Write a byte to the specified offset */
 static int __lis3lv02d_byte_write(struct i2c_client *client, u8 offset, u8 reg)
@@ -240,18 +259,22 @@ static int __lis3lv02d_blk_read(struct i2c_client *client, u8 offset,
 static int __lis3lv02d_poweron(struct lis3lv02d_priv *priv)
 {
 	struct i2c_client *client = priv->client;
-	u8 reg, odrbit;
+	u8 reg;
+	unsigned char cfg = priv->pdata->device_cfg;
 	int err;
 
 	/* Turn on the sensor and enable XYZ axis */
-	odrbit = priv->pdata->device_cfg & LIS3_ODR_MASK;
-	reg = odrbit | CTRL1_PD0 | CTRL1_Xen | CTRL1_Yen | CTRL1_Zen;
+	reg = (cfg &  LIS3_ODR_MASK) | 			/* Output data rate */
+	       CTRL1_Xen | CTRL1_Yen | CTRL1_Zen |	/* XYZ axis enable  */
+	       CTRL1_PD0;				/* Power on */
 	err = __lis3lv02d_byte_write(client, CTRL_REG1, reg);
 	if (err < 0)
 		return err;
 
-	/* BDU | BOOT, event interrupts disabled */
-	reg = CTRL2_BDU | CTRL2_BOOT;
+	/* Set up scale, update and boot */
+	reg = (cfg & LIS3_FS_MASK) |	/* Full-scale */
+	      CTRL2_BDU |		/* Inhibit update between LSB and MSB */
+	      CTRL2_BOOT;		/* Reboot memory content */
 	err = __lis3lv02d_byte_write(client, CTRL_REG2, reg);
 	if (err < 0)
 		return err;
@@ -260,7 +283,7 @@ static int __lis3lv02d_poweron(struct lis3lv02d_priv *priv)
 	 * As stated in the lis3lv02d data sheet, the device turn on time is
 	 * given by the ratio 5/ODR [sec].
 	 */
-	msleep(5000 / odrs[odrbit >> 4]);
+	msleep(5000 / odrs[(cfg &  LIS3_ODR_MASK) >> 4]);
 
 	priv->powered = true;
 
@@ -307,7 +330,7 @@ static int __lis3lv02d_read_axis(struct lis3lv02d_priv *priv,
 			struct lis3lv02d_axis *axis)
 {
 	u16 databuf[3];
-	int err;
+	int err, x, y, z;
 
 	/* Read xyz axis */
 	err = __lis3lv02d_blk_read(priv->client, OUTX_L, databuf, 6);
@@ -315,9 +338,14 @@ static int __lis3lv02d_read_axis(struct lis3lv02d_priv *priv,
 		return err;
 
 	if (axis) {
-		axis->x = (s16) le16_to_cpu(databuf[0]);
-		axis->y = (s16) le16_to_cpu(databuf[1]);
-		axis->z = (s16) le16_to_cpu(databuf[2]);
+		x = (s16) le16_to_cpu(databuf[0]);
+		y = (s16) le16_to_cpu(databuf[1]);
+		z = (s16) le16_to_cpu(databuf[2]);
+
+		/* Adjust measures based on scale/sensitivity */
+		axis->x = (x * SCALE) / priv->sensitivity;
+		axis->y = (y * SCALE) / priv->sensitivity;
+		axis->z = (z * SCALE) / priv->sensitivity;
 	}
 	return 0;
 }
@@ -654,7 +682,7 @@ static int lis3lv02d_poll_enable(struct lis3lv02d_priv *priv)
 {
 	struct input_polled_dev *input_polled;
 	struct input_dev *input;
-	int err;
+	int err, max_val;
 
 	if (priv->input_polled)
 		return -EINVAL;		/* polling is already enable */
@@ -688,9 +716,10 @@ static int lis3lv02d_poll_enable(struct lis3lv02d_priv *priv)
 	set_bit(ABS_Y, input->absbit);
 	set_bit(ABS_Z, input->absbit);
 
-	input_set_abs_params(input, ABS_X, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
-	input_set_abs_params(input, ABS_Y, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
-	input_set_abs_params(input, ABS_Z, -FULLRES_MAX_VAL, FULLRES_MAX_VAL, 3, 3);
+	max_val = (FULLRES_MAX_VAL * SCALE) / priv->sensitivity;
+	input_set_abs_params(input, ABS_X, -max_val, max_val, 3, 3);
+	input_set_abs_params(input, ABS_Y, -max_val, max_val, 3, 3);
+	input_set_abs_params(input, ABS_Z, -max_val, max_val, 3, 3);
 
 	/* Setup KEY event for free-fall (only if enabled) */
 	if (priv->ff_enabled) {
@@ -751,15 +780,15 @@ static int lis3lv02d_probe(struct i2c_client *client,
 	pdata = client->dev.platform_data;
 	if (!pdata) {
 		dev_info(&client->dev,
-			"no platform data, using default initialization\n");
+			"no platform data, using defaults\n");
 		pdata = &lis3lv02d_default_init;
 	}
 	priv->pdata = pdata;
+	priv->sensitivity = (pdata->device_cfg & LIS3_FS_MASK) == LIS3_FS_6G ?
+		SENSITIVITY_6G : SENSITIVITY_2G;
 
 	/* Look for li3lv02d inertial sensor */
-	if (__lis3lv02d_byte_read(client, WHO_AM_I) == WAI_LIS3LV02D) {
-		dev_info(&client->dev, "found LIS3LV02DL inertial sensor\n");
-	} else {
+	if (__lis3lv02d_byte_read(client, WHO_AM_I) != WAI_LIS3LV02D) {
 		dev_err(&client->dev,
 			"unable to find LIS3LV02DL inertial sensor\n");
 		err = -ENODEV;
@@ -816,7 +845,6 @@ static int lis3lv02d_probe(struct i2c_client *client,
 		 * the Free-Fall, thus Free-Fall detection is enabled.
 		 */
 		priv->ff_enabled = true;
-		dev_info(&client->dev, "Free-Fall detection enabled\n");
 	}
 
 	/* Enable input polling */
@@ -825,6 +853,13 @@ static int lis3lv02d_probe(struct i2c_client *client,
 		if (err)
 			goto err_free_irq;
 	}
+
+	dev_info(&client->dev,
+		"rev %s, %s data rate, %s full-scale, free-fall %s\n",
+		DRIVER_VERSION,
+		get_odr_desc((pdata->device_cfg & LIS3_ODR_MASK) >> 4),
+		get_fs_desc((pdata->device_cfg & LIS3_FS_MASK) >> 7),
+		priv->ff_enabled ? "enabled" : "disabled");
 
 	return 0;
 
@@ -895,7 +930,7 @@ static void __exit lis3lv02d_exit(void)
 MODULE_DESCRIPTION("ST LIS3LV02DL inertial sensor driver");
 MODULE_AUTHOR("Fabrizio Ghiringhelli <fghiro@gmail.com>");
 MODULE_LICENSE("GPL");
-
+MODULE_VERSION(DRIVER_VERSION);
 
 module_init(lis3lv02d_init);
 module_exit(lis3lv02d_exit);

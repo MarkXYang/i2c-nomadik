@@ -35,19 +35,21 @@ struct lis3lv02d_nhk8815_platform_data {
 	 *             ODR0 = 1, ODR1 = 0 -->  ODR = 160Hz
 	 *             ODR0 = 0, ODR1 = 1 -->  ODR = 640Hz
 	 *             ODR0 = 1, ODR1 = 1 -->  ODR = 2560Hz
-	 *   FULLSCALE: A '0' = 2g and a '1' = 6g
+	 *   FS_MASK: define the full-scale range. A '0' = 2g and a '1' = 6g
 	 */
 
 #define LIS3_EPOLL	(1 << 0)
 #define	LIS3_ODR0	(1 << 4)
 #define	LIS3_ODR1	(1 << 5)
-#define LIS3_FULLSCALE	(1 << 7)
+#define LIS3_FS_MASK	(1 << 7)
 
 #define LIS3_ODR_MASK	(LIS3_ODR0 | LIS3_ODR1)
 #define LIS3_ODR_40HZ	(0 << 4)
 #define LIS3_ODR_160HZ	(1 << 4)
 #define LIS3_ODR_640HZ	(2 << 4)
 #define LIS3_ODR_2560HZ	(3 << 4)
+#define LIS3_FS_2G	(0 << 7)
+#define LIS3_FS_6G	(1 << 7)
 
 	unsigned char device_cfg;
 
