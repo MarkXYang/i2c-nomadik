@@ -1,0 +1,154 @@
+% VDE Template for EUSAR Papers
+% Provided by Barbara Lang und Siegmar Lampe
+% University of Bremen, January 2002
+% English version by Jens Fischer
+% German Aerospace Center (DLR), December 2005
+% Additional modifications by Matthias Wei{\ss}
+% FGAN, January 2009
+
+%-----------------------------------------------------------------------------
+% Type of publication
+\documentclass[a4paper,10pt]{article}
+%-----------------------------------------------------------------------------
+% Other packets: Most packets may be downloaded from www.dante.de and
+% "tcilatex.tex" can be found at (December 2005):
+% http://www.mackichan.com/techtalk/v30/UsingFloat.htm
+% Not all packets are necessarily needed:
+\usepackage[T1]{fontenc}
+\usepackage[latin1]{inputenc}
+%\usepackage{ngerman} % in german language if required
+\usepackage[nooneline,bf]{caption} % Figure descriptions from left margin
+\usepackage{times}
+\usepackage{multicol}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[dvips]{graphicx}
+\usepackage{epsfig}
+\input{tcilatex}
+%-------------------------------------------------------------------------------
+% Page Setup
+\textheight24cm \textwidth17cm \columnsep6mm
+\oddsidemargin-5mm                 % depending on print drivers!
+\evensidemargin-5mm                % required margin size: 2cm
+\headheight0cm \headsep0cm \topmargin0cm \parindent0cm
+\pagestyle{empty}                  % delete footer and header
+%------------------------------------------------------------------------------
+% Environment definitions
+\newenvironment*{mytitle}{\begin{LARGE}\bf}{\end{LARGE}\\}%
+\newenvironment*{mysubtitle}{\bf}{\\[1.5ex]}%
+\newenvironment*{myabstract}{\begin{Large}\bf}{\end{Large}\\[2.5ex]}%
+%-------------------------------------------------------------------------------
+% Using Pictures and tables:
+% - Instead "table" write "tablehere" without parameters
+% - Instead "figure" write "figurehere " without parameters
+% - Please insert a blank line before and after \begin{figuerhere} ... \end{figurehere}
+%
+% CAUTION:   The first reference to a figure/table in the text should be formatted fat.
+%
+\makeatletter
+\newenvironment{tablehere}{\def\@captype{table}}{}
+\newenvironment{figurehere}{\def\@captype{figure}\vspace{2ex}}{\vspace{2ex}}
+\makeatother
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+% Please use capital letters in the beginning of important words as for example
+\begin{mytitle}I2C on a Linux based embedded system\end{mytitle}
+\begin{mysubtitle}
+Design of a bus driver and a client driver for the Nomadik NHK8815 platform
+\end{mysubtitle}
+%
+% Please do not insert a line here
+%
+\\
+Ghiringhelli Fabrizio\\
+Matr. 753368, (fabrizio.ghiringhelli@mail.polimi.it)\\
+\hspace{10ex}
+\begin{flushright}
+\emph{Report for the master course of Embedded Systems}\\
+\emph{Reviser: PhD. Patrick Bellasi (bellasi@elet.polimi.it)}
+\end{flushright}
+
+Received: September, ?? 2012\\
+\hspace{10ex}
+
+\begin{myabstract} Abstract \end{myabstract}
+TODO
+
+\vspace{4ex}	% Please do not remove or reduce this space here.
+\begin{multicols}{2}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+Objective of the project\\
+Adopted strategy\\
+Report summary 
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{I2C protocol overview}
+% Please avoid separations in titles
+% and separate text manually
+
+Brief description of the I2C protocol
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{The Nomadik NHK8815 platform}
+
+Brief description of the Nomadik platform
+Focus on the I2C bus (address map of I2C clients)
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{Project setup}
+
+Description of the project organization (folder structure, environmental variables, etc.)
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{I2C client driver}
+
+Description of the implementation details of the lis3lv02d inertial sensor
+driver.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{I2C bus driver}
+
+Description of the implementation details of the stn8815 i2c bus driver.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Tools}
+
+Description of the tools and scripts used throughout the project.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+
+TODO
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Add all references without citing
+%\nocite{_bibtexkey_}
+
+% We suggest the use of JabRef for editing your bibliography file (Report.bib)
+\bibliographystyle{splncs}
+\bibliography{Report}
+
+\end{multicols}
+\end{document}
