@@ -22,8 +22,12 @@
 \usepackage{multicol}
 \usepackage{amsmath}
 \usepackage{amssymb}
-\usepackage[dvips]{graphicx}
+\usepackage{graphicx}
 \usepackage{epsfig}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{mdframed}
+
 \input{tcilatex}
 %-------------------------------------------------------------------------------
 % Page Setup
@@ -45,18 +49,38 @@
 %
 % CAUTION:   The first reference to a figure/table in the text should be formatted fat.
 %
+%
+%\begin{figurehere}
+% \centering
+% \includegraphics[width=8cm, height=4cm]{./eps/placeholder.eps}
+% \caption{Some single-column figure caption.}
+% \label{fig:myfigure1}
+%\end{figurehere}
+%
+%\begin{figure*}[t]
+%  \centering
+% \includegraphics[width=16cm, height=4cm]{./eps/placeholder.eps}
+% \caption{Some wide-figure caption.}
+% \label{fig:myfigure2}
+%\end{figure*}
+
 \makeatletter
 \newenvironment{tablehere}{\def\@captype{table}}{}
 \newenvironment{figurehere}{\def\@captype{figure}\vspace{2ex}}{\vspace{2ex}}
 \makeatother
 
+\definecolor{lightgreen}{rgb}{0.0,0.7,0.0}
+\definecolor{lightblue}{rgb}{0.0,0.0,0.7}
+\definecolor{lightgrey}{rgb}{0.6,0.6,0.6}
+
+\newcommand{\icc}{I\textsuperscript{2}C }
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{document}
 
 % Please use capital letters in the beginning of important words as for example
-\begin{mytitle}I2C on a Linux based embedded system\end{mytitle}
+\begin{mytitle}\icc on a Linux based embedded system\end{mytitle}
 \begin{mysubtitle}
 Design of a bus driver and a client driver for the Nomadik NHK8815 platform
 \end{mysubtitle}
@@ -83,38 +107,188 @@ TODO
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}
-Objective of the project\\
-Adopted strategy\\
-Report summary 
+Today Linux is the operating system choice for many computer systems which
+include, not only desktop and server supercomputers, but also a wide range of 
+special-purpose electronic devices known as embedded systems.
+An embedded system is specifically designed to perform a set of designated
+activities, and it generally uses custom, heterogeneous processors. This makes
+Linux a flexible operating system capable of running on a variety of
+architectures, such as ARM, PowerPC, MIPS, SPARC, x86, and many others.
+
+However, this flexibility doesn't come for free. While it's true that the
+Linux highly modular architecture facilitates the porting phase, still a
+lot of efforts are required to build new kernel components to fully
+support the target platform.
+
+A big part of these efforts are in developing the low-level interfaces
+commonly referred to as \emph{device drivers}.
+A device driver (driver for short) is a piece of software designed to direct
+control a specific hardware resource using an hardware-independent well defined
+interface.
+
+This paper details the design of two \icc drivers for the Nomadik NHK8815
+platform: a client driver for an on-board inertial sensor, presented in
+section \ref{sec:i2c_client_driver}, and a bus driver for the Sistem-On-Chip
+\icc controller (section \ref{sec:i2c_bus_driver}).
+
+The rest of this section provides an overview of the \icc protocol
+(\ref{sec:i2c_protocol_overview}), a brief description of the NHK8815 evaluation
+board (\ref{sec:nomadik_nhk8815_platform}), and detail information regarding
+the project environment (\ref{sec:project_setup}). Finally, the section
+\ref{sec:tools} describes the tools and scripts used throughout the project.
 
 
 
 %-------------------------------------------------------------------------------
 \subsection{I2C protocol overview}
-% Please avoid separations in titles
-% and separate text manually
+\label{sec:i2c_protocol_overview}
+The Inter-Integrated Circuit, or \icc, is a synchronous master-slave messaging
+protocol designed to connect a pool of devices by means of a two-wire bus.
+It is a simple and low-bandwidth protocol which allows for short-distance on
+board communications, while being extremely modest in its hardware resource
+requirements. The original standard specified a standard clock rate of 100KHz.
+Later updates to the standard introduced a fast speed of 400KHz and a high speed
+of 1.7 or 3.4 MHz.
 
-Brief description of the I2C protocol
+The \icc bus consists of two bi-directional lines, one line for data (SDA)
+and one for clock (SCL), by means of which a single master device can send
+informations serially to one ore more slave devices (Figure
+\ref{fig:i2c-implementation}).
+To prevent any conflict every device hooked up to the bus have its own unique
+address. The standard \icc specifies two different addressing schema, 7 and
+10 bits, allowing at most 128 and 1024 devices connected at the same time.
+A transm
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=6cm, height=3.8cm]{./figures/i2c-diagram.png}
+ \caption{Sample \icc implementation (adapted from \emph{embedded-lab.com}).}
+ \label{fig:i2c-implementation}
+\end{figurehere}
+
+Each \icc transaction is always initiated by the master which is in charge of
+the bus for the entire duration of the transaction, meaning that it controls the
+clock and generates the START and STOP sequences. The start and stop sequences
+mark the beginning and the end of a transaction and are the only places where
+the SDA line is allowed to change while the SCL is high.
+
+All data are transfered one byte at a time. In 7-bit addressing mode, the slave
+address occupies the seven most significant bits of the first byte, with the
+least significant bit serving as a read/write flag to indicate whether data
+will be written to the slave ('0') or data will be read from the slave ('1').
+For every byte received, the slave device sends back an acknowledge bit.
+Figure \ref{fig:i2c-implementation} shows an example of a typical \icc
+transaction.
+
+The \icc protocol supports multiple masters. In a multi-master environment two
+or more masters may simultaneously attempt to initiate a data transfer.
+In such a scenario, each master must be able to detect a collision and to follow
+the arbitration logic that leeds to the election of a winner master. The winner
+master can then safely begin its transaction.
+The Nomadik NHK8815 platform, like most system designs, operates in a 
+single-master environment as it includes only one master device.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm, height=3.3cm]{./figures/i2c-transaction.jpg}
+ \caption{Sample \icc transaction (adapted from \emph{www.ermicro/blog}).}
+ \label{fig:i2c-transaction}
+\end{figurehere}
+
+\emph{The Linux \icc subsystem}\\[6pt]
+The Linux kernel \icc framework consists of a core layer where resides all the
+routines and data structures available to bus drivers and client drivers (see
+figure \ref{fig:linux-i2c-subsystem}).
+The core also provides a level of indirection that allows both drivers to work
+together independently of their actual implementation.
+
+This philosophy of a core layer and its attendant benefits is an example of how
+Linux helps portability. For instance, enabling \icc on a new platform (which is
+precisely what this paper is all about) requires only to design the
+hardware-dependent components, namely the bus driver and the client drivers,
+whereas the core layer needs not to be changed.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=7.5cm, height=6cm]{./figures/linux-i2c-subsystem.png}
+ \caption{The Limux \icc subsystem (reprinted from \cite{venkateswaran2008eldd},
+ 		p. 236).}
+ \label{fig:linux-i2c-subsystem}
+\end{figurehere}
 
 
 
 %-------------------------------------------------------------------------------
 \subsection{The Nomadik NHK8815 platform}
+\label{sec:nomadik_nhk8815_platform}
+The NHK8815 is a full-featured evaluation board for the ST Microelectronics
+Nomadik STn8815 (figure \ref{fig:nomadik-nhk8815}). It is a fan-less embedded
+computer equipped with a wide range of peripheral devices including USB, UART,
+LAN, WLAN, Bluetooth, FM radio, SIM card reader, SD/MMC card reader, color LCD
+with touch screen controller, key-pad, video encoder, audio codec, FM radio,
+three-axis accelerometer, etc..
 
-Brief description of the Nomadik platform
-Focus on the I2C bus (address map of I2C clients)
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm, height=6.35cm]{./figures/nomadik-nhk8815.jpg}
+ \caption{The Nomadik NHK8815 evaluation board.}
+ \label{fig:nomadik-nhk8815}
+\end{figurehere}
+
+The board is powered by the Nomadik STn8815 multimedia application processor.
+The STn8815 is a \emph{System On Chip} that combines an ARM9 core up to 332MHz
+with level-two cache to audio, video, imaging and graphics accelerators.
+
+
+%The STn8815 block diagram is shown in figure \ref{fig:nomadik-stn8815}.
+%Below is a list of the STn8815 main features:
+
+%\begin{figure*}[t]
+% \centering
+% \includegraphics[width=16cm, height=7.2cm]{./figures/nomadik-stn8815-bd.jpg}
+% \caption{Nomadik STn8815 block diagram.}
+% \label{fig:nomadik-stn8815}
+%\end{figure*}
+
+%\begin{itemize}
+%	\item A smart video accelerator for SDTV video encoding and decoding, with
+%	      MIPI and SMIA camera interfaces.
+%	\item A smart audio accelerator containing a comprehensive set of digital
+%		  audio decoders and encoders, and offering a large number of 3-D
+%		  surround effects.
+%	\item A smart imaging accelerator, providing real-time, programmable image
+%		  reconstruction engine.
+%	\item A smart graphics accelerator.
+%	\item A dynamic, multi-mode power management unit.
+%	\item The ARM926EJ processor, a powerful industry-standard CPU with Java
+%		  acceleration.
+%   \item On-chip ROM and SRAM memory devices, including a 3-Mbit frame buffer.
+%   \item Security framework for enhanced mobile security, including stronger DRM.
+%   \item Multichannel DMA controller.
+%   \item A multi-layer AMBA crossbar interconnect.
+%   \item Hardware semaphores.
+%   \item A wide range of peripheral interfaces (GPIO, USB-OTG high speed, UART,
+%         \icc, FIrDA, SD/high-speed MMC/Memory Stick Pro, fast serial ports,
+%          TV output, color LCD and camera interfaces, scroll-key encoder,
+%          key-pad scanner).
+%\end{itemize}
+
+% >>>> Focus on the I2C bus (address map of I2C clients)
+
 
 
 
 %-------------------------------------------------------------------------------
 \subsection{Project setup}
-
+\label{sec:project_setup}
+% start from original linux torvalds (no ST linux)
 Description of the project organization (folder structure, environmental variables, etc.)
 
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{I2C client driver}
+\label{sec:i2c_client_driver}
 
 Description of the implementation details of the lis3lv02d inertial sensor
 driver.
@@ -123,6 +297,7 @@ driver.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{I2C bus driver}
+\label{sec:i2c_bus_driver}
 
 Description of the implementation details of the stn8815 i2c bus driver.
 
@@ -130,6 +305,7 @@ Description of the implementation details of the stn8815 i2c bus driver.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Tools}
+\label{sec:tools}
 
 Description of the tools and scripts used throughout the project.
 
@@ -138,7 +314,7 @@ Description of the tools and scripts used throughout the project.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
 
-TODO
+TODO.
 
 
 
