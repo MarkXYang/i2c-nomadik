@@ -26,6 +26,8 @@
 \usepackage{epsfig}
 \usepackage{listings}
 \usepackage{color}
+\usepackage{nameref}
+\usepackage{url}
 \usepackage{mdframed}
 
 \input{tcilatex}
@@ -68,6 +70,13 @@
 \newenvironment{tablehere}{\def\@captype{table}}{}
 \newenvironment{figurehere}{\def\@captype{figure}\vspace{2ex}}{\vspace{2ex}}
 \makeatother
+
+\newenvironment{packed_items}{
+\begin{itemize}
+  \setlength{\itemsep}{3pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{itemize}}
 
 \definecolor{lightgreen}{rgb}{0.0,0.7,0.0}
 \definecolor{lightblue}{rgb}{0.0,0.0,0.7}
@@ -157,7 +166,6 @@ informations serially to one ore more slave devices (Figure
 To prevent any conflict every device hooked up to the bus have its own unique
 address. The standard \icc specifies two different addressing schema, 7 and
 10 bits, allowing at most 128 and 1024 devices connected at the same time.
-A transm
 
 \begin{figurehere}
  \centering
@@ -186,7 +194,7 @@ In such a scenario, each master must be able to detect a collision and to follow
 the arbitration logic that leeds to the election of a winner master. The winner
 master can then safely begin its transaction.
 The Nomadik NHK8815 platform, like most system designs, operates in a 
-single-master environment as it includes only one master device.
+single-master environment.
 
 \begin{figurehere}
  \centering
@@ -197,21 +205,22 @@ single-master environment as it includes only one master device.
 
 \emph{The Linux \icc subsystem}\\[6pt]
 The Linux kernel \icc framework consists of a core layer where resides all the
-routines and data structures available to bus drivers and client drivers (see
-figure \ref{fig:linux-i2c-subsystem}).
-The core also provides a level of indirection that allows both drivers to work
-together independently of their actual implementation.
+routines and data structures available to bus drivers and client drivers
+(figure \ref{fig:linux-i2c-subsystem}).
+The core also provides a level of indirection that allows the underlying drivers
+to change from one system to another without affecting \icc subsystem that
+relies on them.
 
 This philosophy of a core layer and its attendant benefits is an example of how
 Linux helps portability. For instance, enabling \icc on a new platform (which is
-precisely what this paper is all about) requires only to design the
+precisely the objective of this project) requires only to design the
 hardware-dependent components, namely the bus driver and the client drivers,
 whereas the core layer needs not to be changed.
 
 \begin{figurehere}
  \centering
  \includegraphics[width=7.5cm, height=6cm]{./figures/linux-i2c-subsystem.png}
- \caption{The Limux \icc subsystem (reprinted from \cite{venkateswaran2008eldd},
+ \caption{The Linux \icc subsystem (reprinted from \cite{venkateswaran2008eldd},
  		p. 236).}
  \label{fig:linux-i2c-subsystem}
 \end{figurehere}
@@ -235,63 +244,156 @@ three-axis accelerometer, etc..
  \label{fig:nomadik-nhk8815}
 \end{figurehere}
 
-The board is powered by the Nomadik STn8815 multimedia application processor.
+The core of the board is the Nomadik STn8815 multimedia application processor.
 The STn8815 is a \emph{System On Chip} that combines an ARM9 core up to 332MHz
 with level-two cache to audio, video, imaging and graphics accelerators.
 
+Among other interfaces, the STn8815 integrates two \icc high speed controllers
+that support the physical and data-link layer of the \icc protocol.
+Below is a list of the \icc controllers' main features:
+\begin{packed_items}
+	\item Slave transmitter/receiver and master transmitter/receiver modes.
+	\item Standard (100kHz), fast (400kHz) and high-speed (3,4MHz) baud rates.
+	\item 7-bit or 10-bit addressing.
+	\item Compliance with \icc standards.
+\end{packed_items}
 
-%The STn8815 block diagram is shown in figure \ref{fig:nomadik-stn8815}.
-%Below is a list of the STn8815 main features:
+In a traditional \icc bus topology such as the one in figure
+\ref{fig:i2c-implementation}, the STn8815 \icc embedded controller plays the
+role of the master. In order for the controller to access the \icc bus, a
+corresponding driver must be implemented and registered with the \icc
+subsystem. This step is covered in section \ref{sec:i2c_bus_driver},
+"\nameref{sec:i2c_bus_driver}."
 
-%\begin{figure*}[t]
-% \centering
-% \includegraphics[width=16cm, height=7.2cm]{./figures/nomadik-stn8815-bd.jpg}
-% \caption{Nomadik STn8815 block diagram.}
-% \label{fig:nomadik-stn8815}
-%\end{figure*}
+Because on the NHK8815 evaluation board the majority of the on-board peripheral
+devices is connected to the STn8815 \icc bus 0, in this project I focus the
+attention on this bus rather than on bus 1.
+The table \ref{table:i2c-device-addresses} reports the list of devices on 
+the \icc bus 0, with their 7-bit address.
+Just like for the case of the bus driver, in order for each slave device
+to function a corresponding driver must be registred to the \icc subsystem.
+My choice for this project was the LIS3LV02D, a MEMS inertial sensor mapped
+at the address 1D on the Nomadik board.
+The design of the LIS3LV02D driver is detailed in section
+\ref{sec:i2c_client_driver}, "\nameref{sec:i2c_client_driver}."\\[6pt]
 
-%\begin{itemize}
-%	\item A smart video accelerator for SDTV video encoding and decoding, with
-%	      MIPI and SMIA camera interfaces.
-%	\item A smart audio accelerator containing a comprehensive set of digital
-%		  audio decoders and encoders, and offering a large number of 3-D
-%		  surround effects.
-%	\item A smart imaging accelerator, providing real-time, programmable image
-%		  reconstruction engine.
-%	\item A smart graphics accelerator.
-%	\item A dynamic, multi-mode power management unit.
-%	\item The ARM926EJ processor, a powerful industry-standard CPU with Java
-%		  acceleration.
-%   \item On-chip ROM and SRAM memory devices, including a 3-Mbit frame buffer.
-%   \item Security framework for enhanced mobile security, including stronger DRM.
-%   \item Multichannel DMA controller.
-%   \item A multi-layer AMBA crossbar interconnect.
-%   \item Hardware semaphores.
-%   \item A wide range of peripheral interfaces (GPIO, USB-OTG high speed, UART,
-%         \icc, FIrDA, SD/high-speed MMC/Memory Stick Pro, fast serial ports,
-%          TV output, color LCD and camera interfaces, scroll-key encoder,
-%          key-pad scanner).
-%\end{itemize}
-
-% >>>> Focus on the I2C bus (address map of I2C clients)
-
+\begin{tablehere}
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{l l c}
+		\hline
+		Device type & Description & 7-bit address \\
+		\hline
+		STw5095 & Stereo audio codec & 1A \\
+		LIS3LV02DL & Three-Axes accelerometer & 1D \\
+		STw8009 & Video digital encoder	 & 21 \\
+		TDA8023TT & Smart Card interface & 22,23 \\
+		STw4811 & Power management & 2D \\
+		STMPE2401 & Port expanders & 43,44 \\
+		TSC2003IPW & Touch screen controller & 48 \\
+		STw4102 & Battery charger & 70 \\
+		\hline
+	\end{tabular}
+	\caption{NHK8815 \icc device address map.}
+	\label{table:i2c-device-addresses}
+\end{tablehere}
 
 
 
 %-------------------------------------------------------------------------------
 \subsection{Project setup}
 \label{sec:project_setup}
-% start from original linux torvalds (no ST linux)
-Description of the project organization (folder structure, environmental variables, etc.)
+% TODO:
+% x project directory layout
+% x environmental variables
+% x explain why starting from original linux torvalds (no ST linux)
+% - bbfs
+
+The first step to the project is to get the Linux kernel source and to configure
+it for the target board. Instead of  using a vendor supplied kernel such as like
+STLinux, my personal strategy for this project was to work with the official
+kernel from \emph{www.kernel.org}.
+This decision was motivated by the need to keep the development process as neat
+as possible, and to avoid performing tasks that are not strictly concerned with
+the project.
+
+It should be noted that the official kernel offers only limited support for the
+Nomadik  NHK8815 platform.
+This includes basic definitions and register addresses, interrupt management,
+resource definitions and timers. The \icc interface can be used through the
+generic drivers \emph{i2c-gpio} and \emph{i2c-algobit}, but no one of the NHK8815
+\icc slave devices is provided.
+
+I cloned the git repository at kernel.org on a local machine folder
+located \underline{outside} the project workspace. From the tag \emph{3.3}
+I created a new branch called \emph{i2cdevel}, where to commit the kernel updates.
+I generated one patch per commit. All patches are numbered in sequence and
+stored in a folder \underline{inside} the project workspace called
+\emph{linux-3.3.0-patches}.
+
+One benefit of this approach is that the project workspace, which is a git
+repository as required, also holds all the data needed to obtain the modified
+kernel from the official one.
+Table \ref{table:project-dir-layout} shows the project workspace layout.
+In addition, to ease the project management I defined a set of environmental
+variables. A list of them with their definition is presented in table
+\ref{table:project-env-variables}.
+
+Finally, one note about the root filesystem. It was build using BusyBox
+(version 1.18.4). More precisely, I used a tool called \textbf{bbfs 1.3}, 
+developed by \emph{Alessandro Rubini} and released under GNU GPL license
+(see \cite{bbfs1.3} for details).\\
+
+\begin{tablehere}
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{l p{5cm}}
+		\hline
+		Variable & Decription \\
+		\hline
+		\texttt{PRJROOT} & The project root \\
+		\texttt{KERNELDIR} & The root directory of the kernel source tree \\
+		\texttt{PATCHESDIR} & The \emph{linux-3.3.0-patches} directory \\
+		\texttt{ROOTFS} & The directory that holds the root filesystem \\
+		\texttt{MODULESDIR} & The directory for temporary holding of the
+			loadable driver modules \\
+		\hline
+	\end{tabular}
+	\caption{Project environmental variables.}
+	\label{table:project-env-variables}
+\end{tablehere}
+
+
+\begin{table*}
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{p{5cm} p{11cm}}
+		\hline
+		Directory & Content \\
+		\hline
+		\texttt{linux-3.3.0-patches} & The patches to the Linux kernel and the 
+			kernel configuration file \emph{.config}\\
+		\texttt{drivers} & The bus driver and slave driver (one subfolder per
+			each driver) \\
+		\texttt{report} & The \LaTeX sources of this paper \\
+		\texttt{script} & Shell scripts (stored in the root folder of the target
+			filesystem) \\
+		\texttt{tools} & User-space programs to evaluate the drivers (stored in
+			the root folder of the target filesystem) \\
+		\texttt{images} & The binary image of the kernel and the root
+			filesystem \\
+		\hline
+	\end{tabular}
+	\caption{Project directory layout.}
+	\label{table:project-dir-layout}
+\end{table*}
+
 
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{I2C client driver}
 \label{sec:i2c_client_driver}
-
-Description of the implementation details of the lis3lv02d inertial sensor
-driver.
 
 
 
