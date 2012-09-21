@@ -28,7 +28,7 @@
 \usepackage{color}
 \usepackage{nameref}
 \usepackage{url}
-\usepackage{mdframed}
+\usepackage{inconsolata}
 
 \input{tcilatex}
 %-------------------------------------------------------------------------------
@@ -71,18 +71,41 @@
 \newenvironment{figurehere}{\def\@captype{figure}\vspace{2ex}}{\vspace{2ex}}
 \makeatother
 
-\newenvironment{packed_items}{
+\newenvironment{packeditems}{
 \begin{itemize}
   \setlength{\itemsep}{3pt}
   \setlength{\parskip}{0pt}
   \setlength{\parsep}{0pt}
 }{\end{itemize}}
 
+\newenvironment{packedenum}{
+\begin{enumerate}
+  \setlength{\itemsep}{3pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{enumerate}}
+
 \definecolor{lightgreen}{rgb}{0.0,0.7,0.0}
 \definecolor{lightblue}{rgb}{0.0,0.0,0.7}
 \definecolor{lightgrey}{rgb}{0.6,0.6,0.6}
 
 \newcommand{\icc}{I\textsuperscript{2}C }
+\newcommand{\keyword}[1]{\texttt{\textbf{#1}}}
+
+% lstlisting global parameters
+\lstset{
+	language=C,
+	basicstyle=\scriptsize\ttfamily,
+	keywordstyle=\color{lightblue},
+	commentstyle=\color{lightgrey},
+	captionpos=b,	% caption at the bottom of listing
+	xleftmargin=6pt,
+	xrightmargin=6pt,
+	framexleftmargin=4pt,
+	framexrightmargin=4pt,
+	aboveskip=12pt,
+	belowskip=12pt
+}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -251,12 +274,12 @@ with level-two cache to audio, video, imaging and graphics accelerators.
 Among other interfaces, the STn8815 integrates two \icc high speed controllers
 that support the physical and data-link layer of the \icc protocol.
 Below is a list of the \icc controllers' main features:
-\begin{packed_items}
+\begin{packeditems}
 	\item Slave transmitter/receiver and master transmitter/receiver modes.
 	\item Standard (100kHz), fast (400kHz) and high-speed (3,4MHz) baud rates.
 	\item 7-bit or 10-bit addressing.
 	\item Compliance with \icc standards.
-\end{packed_items}
+\end{packeditems}
 
 In a traditional \icc bus topology such as the one in figure
 \ref{fig:i2c-implementation}, the STn8815 \icc embedded controller plays the
@@ -285,7 +308,7 @@ The design of the LIS3LV02D driver is detailed in section
 		Device type & Description & 7-bit address \\
 		\hline
 		STw5095 & Stereo audio codec & 1A \\
-		LIS3LV02DL & Three-Axes accelerometer & 1D \\
+		LIS3LV02DL & Inertial sensor & 1D \\
 		STw8009 & Video digital encoder	 & 21 \\
 		TDA8023TT & Smart Card interface & 22,23 \\
 		STw4811 & Power management & 2D \\
@@ -303,11 +326,6 @@ The design of the LIS3LV02D driver is detailed in section
 %-------------------------------------------------------------------------------
 \subsection{Project setup}
 \label{sec:project_setup}
-% TODO:
-% x project directory layout
-% x environmental variables
-% x explain why starting from original linux torvalds (no ST linux)
-% - bbfs
 
 The first step to the project is to get the Linux kernel source and to configure
 it for the target board. Instead of  using a vendor supplied kernel such as like
@@ -321,8 +339,8 @@ It should be noted that the official kernel offers only limited support for the
 Nomadik  NHK8815 platform.
 This includes basic definitions and register addresses, interrupt management,
 resource definitions and timers. The \icc interface can be used through the
-generic drivers \emph{i2c-gpio} and \emph{i2c-algobit}, but no one of the NHK8815
-\icc slave devices is provided.
+generic drivers \emph{i2c-gpio} and \emph{i2c-algo-bit}, but no one of the
+NHK8815 \icc slave devices is provided.
 
 I cloned the git repository at kernel.org on a local machine folder
 located \underline{outside} the project workspace. From the tag \emph{3.3}
@@ -347,7 +365,7 @@ developed by \emph{Alessandro Rubini} and released under GNU GPL license
 \begin{tablehere}
 	\centering
 	\renewcommand{\arraystretch}{1.2}	
-	\begin{tabular}{l p{5cm}}
+	\begin{tabular}{l p{5.5cm}}
 		\hline
 		Variable & Decription \\
 		\hline
@@ -394,6 +412,199 @@ developed by \emph{Alessandro Rubini} and released under GNU GPL license
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{I2C client driver}
 \label{sec:i2c_client_driver}
+% TODO:
+% x init & probe
+% - sysfs
+% - input polling
+% - free-fall
+% - platform data
+
+This section describes the design of the driver for the LIS3LV02DL inertial
+sensor which equips the NHK8815 evaluation board.
+The LIS3LV02DL is a three axes linear accelerometer that provides the measurement acceleration signals to the external world through an \icc interface.
+The LIS3LV02DL driver was written before the bus driver. Its debug was possible
+by using the gpio-based \icc bus driver available in the original kernel. Once
+completed and tested, the LIS3LV02DL driver was then used for debugging the new
+STN8815 \icc bus driver.\\
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{Initialization and probing}
+\label{sec:lis3_init_probe}
+
+During initialization the driver registers itself with the \icc core. This
+is achieved by populating a \keyword{struct i2c\_driver} and passing it
+as argument to the function \keyword{i2c\_add\_driver()}
+\footnote{from the driver source code - file \emph{lis3lv02d-nhk8815.c}}.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers=left,
+]
+/* Device and driver names */
+#define	DEVICE_NAME		"lis3lv02d"
+
+/* I2C client structure */
+static struct i2c_device_id lis3lv02d_idtable[] = {
+  { DEVICE_NAME, 0 },
+  {}
+};
+MODULE_DEVICE_TABLE(i2c, lis3lv02d_idtable);
+
+static struct i2c_driver lis3lv02d_driver = {
+  .driver   = {
+    .name = DRIVER_NAME
+  },
+  .probe    = lis3lv02d_probe,
+  .remove   = __devexit_p(lis3lv02d_remove),
+  .id_table = lis3lv02d_idtable,
+};
+
+/* Module init */
+static int __init lis3lv02d_init(void)
+{
+  return i2c_add_driver(&lis3lv02d_driver);
+}
+\end{lstlisting}
+
+The structure \keyword{i2c\_driver} holds pointers to the probe function
+and to the remove function that are executed respectively on device probing
+and when the device is removed (if ever).
+The \keyword{id\_table} member of the structure \keyword{i2c\_driver} informs
+the \icc framework about which slave devices are supported by the driver.
+In this case the only chip supported is named \keyword{lis3lv02d}.
+The names of the supported devices are important for \emph{binding}, as
+explained next.
+
+The binding process consists of associating a device with a driver that can
+control it. In embedded systems where the number of the \icc bus and the
+devices connected to it are known for a fact, it is possible to declare in
+advance the \icc slaves which live on the bus. This is typically done in the
+board setup file, as shown below
+\footnote{from the NHK8815 setup source code - file \emph{board-nhk8815.c}}:
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+]
+/* I2C devices */
+static struct i2c_board_info nhk8815_i2c_devices[] = {
+  {
+    I2C_BOARD_INFO("lis3lv02d", 0x1D),
+    .irq = NOMADIK_GPIO_TO_IRQ(82),
+    /* No platform data: use driver defaults */
+  },
+};
+
+static void __init nhk8815_platform_init(void)
+{
+  ...
+  /* Register I2C devices on bus #0 (scl0, sda0) */
+  i2c_register_board_info(0, nhk8815_i2c_devices,
+    ARRAY_SIZE(nhk8815_i2c_devices));
+  ...
+}
+\end{lstlisting}
+
+The \keyword{nhk8815\_platform\_init} function is executed on board startup
+and, among other tasks, registers the \icc slave devices by invoking the
+\keyword{i2c\_register\_board\_info} function with arguments that specify
+the number of the bus (zero in this case) and the devices connected with it.
+This is done through an array of \keyword{struct i2c\_board\_info}, each item
+of which specify the device name and the device address, with the former that
+must match with the name registered by the driver for successful binding.
+In this case \keyword{struct i2c\_board\_info} holds only one item which
+corresponds to the LIS3LV02DL inertial sensor. Seeing that this sensor's chip
+has an interrupt line tied to the cpu (gpio 82), the \keyword{irq} member is
+also specified with the corresponding IRQ number. By means of another member
+called \keyword{platform\_data} it is possible to define custom data for the
+driver; if not specified like in this case, the driver uses its default
+settings, as explained later on this paper.
+
+During boot the kernel looks for any \icc driver that has registered a matching
+device name, that is "lis3lv02d". Upon finding such a driver, the kernel
+ivokes its \keyword{probe()} function passing a pointer to the LIS3LV02DL
+device as a parameter. This process is called \emph{probing}.
+
+The probe function is responsible for the per-device initialization, that is
+initializing hardware, allocating resources, and registering the device with
+any appropriate subsystems. More in detail, the LIS3LV02DL probe function
+takes the following actions:
+\begin{packedenum}
+	\item Allocate memory for a \keyword{struct lis3lv02d\_priv} private data
+		structure.
+	\item Load the device's platform data.
+	\item Idendify the LIS3LV02DL chip.
+	\item Configure the device hardware.
+	\item Create the per-device sysfs nodes.
+	\item If the free-fall feature is enadled, request the interrupt and
+		register the IRQ for the free-fall detection.
+	\item If the device polling feature is enabled, register the device with
+		the input subsystem.
+\end{packedenum}
+On successful completion of all the above steps, meaning a successful probing,
+the device is bound to the driver.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Sysfs interface}
+\label{sec:lis3_sysfs}
+
+Sysfs is an in-memory virtual filesystem that provides a view of the kernel's
+structured device model. It offers a convenient yet simple way to implement
+functionality as sysfs attribute in the appropriate directory. An attribute
+provides a way to map kernel data to files in sysfs: a single attribute maps to
+a single file which can be either readable, writable or both, depending on which
+functionality it exports.
+
+A driver wishing to use sysfs needs to register the sysfs attributes and implement
+their respective functions. The table \ref{table:lis3-sysfs-attributes} shows
+the list of sysfs nodes handled by the LIS3LV02D driver. They are located in
+\keyword{/sys/devices/platform/lis3lv02d/}.
+
+\begin{tablehere}
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{l c p{4cm}}
+		\hline
+		Attribute & Access & Function \\
+		\hline
+		\texttt{position} & r & Show the acceleration along the x,y,z axis \\
+		\hline
+		\texttt{enable} & r & Show the enable status of the device \\
+						& w & Enable/disable the device \\
+		\hline
+		\texttt{ff\_enable} & r & Show the enable status of the free-fall 
+					 			  feature \\
+		\hline
+		\texttt{poll\_enable} & r & Show the enable status of the polling
+									feature \\
+							  & w & Enable/disable the device polling \\
+		\hline
+		\texttt{read} & r & Read the register at the current address \\
+					  & w & Set the current address for reading \\
+		\hline
+		\texttt{write} & w & Write a register. The low byte holds the register
+							 value and the high byte holds the register address \\
+		\hline
+	\end{tabular}
+	\caption{LIS3LV02D sysfs attributes.}
+	\label{table:lis3-sysfs-attributes}
+\end{tablehere}
+
+The figure \ref{fig:lis3-sysfs} shows a
+dump of a shell session executed on the target board, providing a short
+demonstration of how to play with the LIS3LV02D sysfs interface.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm, height=3.46cm]{./figures/lis3lv02d-sysfs.png}
+ \caption{Example of using the LIS3LV02D sysfs interface.}
+ \label{fig:lis3-sysfs}
+\end{figurehere}
 
 
 
