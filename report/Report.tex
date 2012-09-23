@@ -414,9 +414,9 @@ developed by \emph{Alessandro Rubini} and released under GNU GPL license
 \label{sec:i2c_client_driver}
 % TODO:
 % x init & probe
-% - sysfs
-% - input polling
-% - free-fall
+% x sysfs
+% x input polling
+% x free-fall
 % - platform data
 
 This section describes the design of the driver for the LIS3LV02DL inertial
@@ -435,13 +435,14 @@ STN8815 \icc bus driver.\\
 
 During initialization the driver registers itself with the \icc core. This
 is achieved by populating a \keyword{struct i2c\_driver} and passing it
-as argument to the function \keyword{i2c\_add\_driver()}
-\footnote{from the driver source code - file \emph{lis3lv02d-nhk8815.c}}.
+as argument to the function \keyword{i2c\_add\_driver()} as shown below.
 
 \begin{lstlisting}[
 	xleftmargin=15pt,
 	frame = l,
 	numbers=left,
+	caption = {Registration of the I2C driver (from \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-i2cdrv-registration}
 ]
 /* Device and driver names */
 #define	DEVICE_NAME		"lis3lv02d"
@@ -482,13 +483,14 @@ The binding process consists of associating a device with a driver that can
 control it. In embedded systems where the number of the \icc bus and the
 devices connected to it are known for a fact, it is possible to declare in
 advance the \icc slaves which live on the bus. This is typically done in the
-board setup file, as shown below
-\footnote{from the NHK8815 setup source code - file \emph{board-nhk8815.c}}:
+board setup file, as shown below.
 
 \begin{lstlisting}[
 	xleftmargin=15pt,
 	frame = l,
 	numbers = left,
+	caption = {Registration of the I2C devices (from \emph{board-nhk8815.c}).},
+	label = {list:lis3-i2cdev-declaration}
 ]
 /* I2C devices */
 static struct i2c_board_info nhk8815_i2c_devices[] = {
@@ -522,7 +524,7 @@ has an interrupt line tied to the cpu (gpio 82), the \keyword{irq} member is
 also specified with the corresponding IRQ number. By means of another member
 called \keyword{platform\_data} it is possible to define custom data for the
 driver; if not specified like in this case, the driver uses its default
-settings, as explained later on this paper.
+settings, as explained in section \ref{sec:lis3_dev_settings}.
 
 During boot the kernel looks for any \icc driver that has registered a matching
 device name, that is "lis3lv02d". Upon finding such a driver, the kernel
@@ -599,12 +601,263 @@ The figure \ref{fig:lis3-sysfs} shows a
 dump of a shell session executed on the target board, providing a short
 demonstration of how to play with the LIS3LV02D sysfs interface.
 
+The \keyword{cat enable} command returned 'n', meaning that the device was
+disabled.
+Turning the device on is achieved by the command \keyword{echo 1 > enable}.
+The \keyword{cat position} command returned the values 56, -4, 1043 which
+correspond to to acceleration along the x-axis, y-axis and z-axis measured
+in $mg$. \keyword{cat ff\_anable} showed that the free-fall feature is enabled.
+Finally, the last two commands perform a reading at the address 0F; the answer
+is 3A.
+\footnote{0F is the address of the \keyword{WHO\_AM\_I} register which holds
+the device identification number (3A for the LIS3LV02D chip)}.
+
 \begin{figurehere}
  \centering
  \includegraphics[width=8cm, height=3.46cm]{./figures/lis3lv02d-sysfs.png}
  \caption{Example of using the LIS3LV02D sysfs interface.}
  \label{fig:lis3-sysfs}
 \end{figurehere}
+
+
+%-------------------------------------------------------------------------------
+\subsection{Device polling}
+\label{sec:lis3_poll}
+
+Generally speaking \emph{polling} is a technique in which one device periodically
+monitors multiple other devices or makes requests from those devices (e.g. check
+their state). In this project's context, the polling device is the target
+cpu while the LIS3LV02D inertial sensor is the device being polled.
+
+To implement the polling feature the LIS3LV02D driver registers itself with the
+kernel's \emph{input} subsystem; this involves registering \keyword{open()},
+\keyword{close()} and \keyword{poll()} call-back functions, specifying
+the polling interval, setting up the type of events involved, etc.
+The input subsystem takes care of calling the \keyword{poll()} function at the
+specified rate, registering any event notification reported by the driver and
+dispatching it to the user-space via sysfs in
+\keyword{/dev/input/eventX} ('X' is a numeric identifier assigned when the
+driver registers with the input core).
+A demonstration of how the device polling works is given in the section
+\ref{sec:tools}, "\nameref{sec:tools}."
+
+The listing \ref{list:lis3-poll-enable} shows the sequence of instructions
+required to registers with the input core. The driver executes them upon
+enabling polling. It allocates the input device, installs the callback
+function pointers (lines 8-10), programs the ABS events related to the x,y,z
+acceleration data (lines 14-17), and registers the input device (line 26).
+Lines 20 through 23 relates to the free-fall feature which is explained in
+the next section.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Device registration with the input subsystem
+		(from \keyword{lis3lv02d\_poll\_enable()} in
+		\emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-poll-enable}
+]
+struct input_polled_dev *input_polled;
+struct input_dev *input;
+
+/* Allocate memory for the input device */
+input_polled = input_allocate_polled_device();
+
+/* Setup input parameters */
+input_polled->open = lis3lv02d_open;
+input_polled->close = lis3lv02d_close;
+input_polled->poll = lis3lv02d_poll;
+input = input_polled->input;
+
+/* Setup ABS input events */
+set_bit(EV_ABS, input->evbit);
+set_bit(ABS_X, input->absbit);
+set_bit(ABS_Y, input->absbit);
+set_bit(ABS_Z, input->absbit);
+
+/* Setup KEY event for free-fall (only if enabled) */
+if (priv->ff_enabled) {
+  set_bit(EV_KEY, input->evbit);
+  set_bit(KEY_FREE_FALL, input->keybit);
+}
+
+/* Register input polled device */
+input_register_polled_device(input_polled);
+\end{lstlisting}
+
+To disable polling the driver unregisters the input device and frees its
+previously allocated memory (listing \ref{list:lis3-poll-disable}).
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Device unregistration
+		(from \keyword{lis3lv02d\_poll\_disable()} in 
+		\emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-poll-disable}
+]
+/* Unregister input device */
+input_unregister_polled_device(priv->input_polled);
+input_free_polled_device(priv->input_polled);
+\end{lstlisting}
+
+Upon loading the LIS3LV02D driver, the polling function may be either enable
+or not, depending on whether the default or custom settings were used
+(see section \ref{sec:lis3_dev_settings} for details).
+Once the driver is up and running, the polling can be enabled/disabled via the
+sysfs \keyword{poll\_enable} file, as detailed in the previous section.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Free-fall detection}
+\label{sec:lis3_poll}
+The LIS3LV02D may be configured to generate an inertial wake-up/free-fall
+interrupt signal when a programmable acceleration threshold is crossed at least
+in one of the three axes.
+
+The LIS3LV02D driver installs a threaded ISR to handle the free-fall detection.
+Upon receiving an interrupt request the driver reads the acceleration values
+from the sensor and notifies an appropriate event to the input core for being
+dispatched to the user-space.
+Indeed the driver relies on the input subsystem to "inform" the user-space
+about a free-fall event. This implies that the device polling be enabled.
+
+Usage of the free-fall feature can be enabled only statically (i.e at compile
+time) either by adjusting the driver's defaults or by passing custom settings
+from the board initialization code (through \keyword{platfom\_data}).
+From user-space the free-fall enable status can be seen via the sysfs
+\keyword{ff\_enable} file (see table \ref{table:lis3-sysfs-attributes}).
+
+If the free-fall is enabled, the driver's \keyword{probe()} registers the IRQ
+number (as provided by the device) and installs its respective threaded ISR
+(lines 10-15 of listing \ref{list:lis3-irq-register}).
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the free-fall IRQ
+		(from \keyword{probe()} in \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-irq-register}
+]
+/* Get IRQ (only if free-fall is enabled) */
+if (pdata->free_fall_cfg & LIS3_FF_ALL) {
+  ...
+  /* Register IRQ */
+  err = request_threaded_irq(client->irq, NULL,
+    lis3lv02d_isr_thread,
+    IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+    DEVICE_NAME, priv);
+  ...
+  priv->ff_enabled = true;
+}
+\end{lstlisting}
+
+The free-fall is notified in form of a KEY event. As for all the input
+events this requires two steps: registering with the input subsystem
+and reporting upon detection of free-fall.
+The former being executed by \keyword{lis3lv02d\_poll\_enable()} (lines 20-23
+of listing \ref{list:lis3-poll-enable}), and the latter being handled by the
+free-fall ISR as shown below.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Notification of a free-fall KEY event
+		(\keyword{lis3lv02d\_isr\_thread()} from \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-isr}
+]
+/* Report free-fall (KEY) event */
+input_report_key(input, KEY_FREE_FALL, true);
+input_report_key(input, KEY_FREE_FALL, false);
+input_sync(input);
+\end{lstlisting}
+
+
+%-------------------------------------------------------------------------------
+\subsection{LIS3LV02D driver settings}
+\label{sec:lis3_dev_settings}
+
+The customization of the LIS3LV02D settings is done based on \emph{platform data}.
+These are data attached to a platform device, that are completely specific to
+a given device. It allows the board initialization file to transmit detailed and
+custom information about the device to the driver.
+In this project's context, the platform data is represented in form of a
+\keyword{lis3lv02d\_nhk8815\_platform\_data} structure
+(listing \ref{list:lis3-paltform-data}) which allows to set a number of LIS3LV02D parameters including the acceleration full-range (2g or 6g), free-fall settings,
+polling interval, etc..
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {LIS3LV02D driver's platform data
+		(from \emph{lis3lv02d-nhk8815.h}).},
+	label = {list:lis3-paltform-data}
+]
+/* Platform data */
+struct lis3lv02d_nhk8815_platform_data {
+  unsigned char device_cfg;
+  unsigned char free_fall_cfg;
+  unsigned int free_fall_threshold;
+  unsigned char free_fall_duration;
+  unsigned int poll_interval;
+}
+\end{lstlisting}
+
+The board initialization code may omit to transmit custom data, as it relies on
+the driver using its default settings. This is precisely the solution adopted for
+this project as shown in listing \ref{list:lis3-i2cdev-declaration}.
+One may choose the other way round and set up the \keyword{platform\_data}
+member of \keyword{i2c\_board\_info} to point to a 
+\keyword{lis3lv02d\_nhk8815\_platform\_data} structure with custom settings.
+
+Upon probing the driver checks whether \keyword{platform\_data} holds a valid
+pointer and, if this is the case, loads the custom settings. Otherwise it uses
+the default values. The code responsible for this action is reported in listing
+\ref{list:lis3-check-platform-data}.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Loading of the driver settings
+		(\keyword{lis3lv02d\_probe()} in \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-check-platform-data}
+]
+/* Save pointer to platform data */
+pdata = client->dev.platform_data;
+if (!pdata) {
+  dev_info(&client->dev,
+  "no platform data, using defaults\n");
+  pdata = &lis3lv02d_default_init;
+}
+\end{lstlisting}
+
+The driver's default settings are shown below.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {LIS3LV02D driver default setup
+		(from \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-platform-data-defaults}
+]
+/* LIS3LV02D default configuration */
+static const struct lis3lv02d_nhk8815_platform_data
+	lis3lv02d_default_init = {
+
+  .device_cfg = LIS3_ODR_40HZ | LIS3_FS_2G,
+  .poll_interval = 500,
+  .free_fall_cfg = LIS3_FF_XL | LIS3_FF_YL | LIS3_FF_ZL,
+  .free_fall_threshold = 600,
+  .free_fall_duration = 5,	/* 1/ODR [s] */
+};
+\end{lstlisting}
 
 
 
