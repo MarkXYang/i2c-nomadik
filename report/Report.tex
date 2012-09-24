@@ -295,9 +295,9 @@ The table \ref{table:i2c-device-addresses} reports the list of devices on
 the \icc bus 0, with their 7-bit address.
 Just like for the case of the bus driver, in order for each slave device
 to function a corresponding driver must be registred to the \icc subsystem.
-My choice for this project was the LIS3LV02D, a MEMS inertial sensor mapped
+My choice for this project was the LIS3LV02DL, a MEMS inertial sensor mapped
 at the address 1D on the Nomadik board.
-The design of the LIS3LV02D driver is detailed in section
+The design of the LIS3LV02DL driver is detailed in section
 \ref{sec:i2c_client_driver}, "\nameref{sec:i2c_client_driver}."\\[6pt]
 
 \begin{tablehere}
@@ -412,12 +412,6 @@ developed by \emph{Alessandro Rubini} and released under GNU GPL license
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{I2C client driver}
 \label{sec:i2c_client_driver}
-% TODO:
-% x init & probe
-% x sysfs
-% x input polling
-% x free-fall
-% - platform data
 
 This section describes the design of the driver for the LIS3LV02DL inertial
 sensor which equips the NHK8815 evaluation board.
@@ -441,7 +435,8 @@ as argument to the function \keyword{i2c\_add\_driver()} as shown below.
 	xleftmargin=15pt,
 	frame = l,
 	numbers=left,
-	caption = {Registration of the I2C driver (from \emph{lis3lv02d-nhk8815.c}).},
+	caption = {Registration of the LIS3LV02DL driver
+		(from \emph{lis3lv02d-nhk8815.c}).},
 	label = {list:lis3-i2cdrv-registration}
 ]
 /* Device and driver names */
@@ -516,15 +511,15 @@ and, among other tasks, registers the \icc slave devices by invoking the
 \keyword{i2c\_register\_board\_info} function with arguments that specify
 the number of the bus (zero in this case) and the devices connected with it.
 This is done through an array of \keyword{struct i2c\_board\_info}, each item
-of which specify the device name and the device address, with the former that
-must match with the name registered by the driver for successful binding.
+of which specifies the device name and the device address, with the former that
+must match with the name registered by the driver in order for binding to succeed.
 In this case \keyword{struct i2c\_board\_info} holds only one item which
 corresponds to the LIS3LV02DL inertial sensor. Seeing that this sensor's chip
 has an interrupt line tied to the cpu (gpio 82), the \keyword{irq} member is
-also specified with the corresponding IRQ number. By means of another member
+also specified with the respective IRQ number. By means of another member
 called \keyword{platform\_data} it is possible to define custom data for the
 driver; if not specified like in this case, the driver uses its default
-settings, as explained in section \ref{sec:lis3_dev_settings}.
+settings, as explained in section \ref{sec:lis3_settings}.
 
 During boot the kernel looks for any \icc driver that has registered a matching
 device name, that is "lis3lv02d". Upon finding such a driver, the kernel
@@ -538,7 +533,7 @@ takes the following actions:
 \begin{packedenum}
 	\item Allocate memory for a \keyword{struct lis3lv02d\_priv} private data
 		structure.
-	\item Load the device's platform data.
+	\item Load the device settings.
 	\item Idendify the LIS3LV02DL chip.
 	\item Configure the device hardware.
 	\item Create the per-device sysfs nodes.
@@ -564,7 +559,7 @@ functionality it exports.
 
 A driver wishing to use sysfs needs to register the sysfs attributes and implement
 their respective functions. The table \ref{table:lis3-sysfs-attributes} shows
-the list of sysfs nodes handled by the LIS3LV02D driver. They are located in
+the list of sysfs nodes handled by the LIS3LV02DL driver. They are located in
 \keyword{/sys/devices/platform/lis3lv02d/}.
 
 \begin{tablehere}
@@ -593,13 +588,13 @@ the list of sysfs nodes handled by the LIS3LV02D driver. They are located in
 							 value and the high byte holds the register address \\
 		\hline
 	\end{tabular}
-	\caption{LIS3LV02D sysfs attributes.}
+	\caption{LIS3LV02DL sysfs attributes.}
 	\label{table:lis3-sysfs-attributes}
 \end{tablehere}
 
 The figure \ref{fig:lis3-sysfs} shows a
 dump of a shell session executed on the target board, providing a short
-demonstration of how to play with the LIS3LV02D sysfs interface.
+demonstration of how to play with the LIS3LV02DL sysfs interface.
 
 The \keyword{cat enable} command returned 'n', meaning that the device was
 disabled.
@@ -610,12 +605,12 @@ in $mg$. \keyword{cat ff\_anable} showed that the free-fall feature is enabled.
 Finally, the last two commands perform a reading at the address 0F; the answer
 is 3A.
 \footnote{0F is the address of the \keyword{WHO\_AM\_I} register which holds
-the device identification number (3A for the LIS3LV02D chip)}.
+the device identification number (3A for the LIS3LV02DL chip)}.
 
 \begin{figurehere}
  \centering
- \includegraphics[width=8cm, height=3.46cm]{./figures/lis3lv02d-sysfs.png}
- \caption{Example of using the LIS3LV02D sysfs interface.}
+ \includegraphics[width=8cm, height=3.15cm]{./figures/lis3lv02d-sysfs.png}
+ \caption{Example of usage of the LIS3LV02DL sysfs interface.}
  \label{fig:lis3-sysfs}
 \end{figurehere}
 
@@ -627,9 +622,9 @@ the device identification number (3A for the LIS3LV02D chip)}.
 Generally speaking \emph{polling} is a technique in which one device periodically
 monitors multiple other devices or makes requests from those devices (e.g. check
 their state). In this project's context, the polling device is the target
-cpu while the LIS3LV02D inertial sensor is the device being polled.
+cpu while the LIS3LV02DL inertial sensor is the device being polled.
 
-To implement the polling feature the LIS3LV02D driver registers itself with the
+To implement the polling feature the LIS3LV02DL driver registers itself with the
 kernel's \emph{input} subsystem; this involves registering \keyword{open()},
 \keyword{close()} and \keyword{poll()} call-back functions, specifying
 the polling interval, setting up the type of events involved, etc.
@@ -703,9 +698,9 @@ input_unregister_polled_device(priv->input_polled);
 input_free_polled_device(priv->input_polled);
 \end{lstlisting}
 
-Upon loading the LIS3LV02D driver, the polling function may be either enable
+Upon loading the LIS3LV02DL driver, the polling function may be either enable
 or not, depending on whether the default or custom settings were used
-(see section \ref{sec:lis3_dev_settings} for details).
+(see section \ref{sec:lis3_settings} for details).
 Once the driver is up and running, the polling can be enabled/disabled via the
 sysfs \keyword{poll\_enable} file, as detailed in the previous section.
 
@@ -713,11 +708,11 @@ sysfs \keyword{poll\_enable} file, as detailed in the previous section.
 %-------------------------------------------------------------------------------
 \subsection{Free-fall detection}
 \label{sec:lis3_poll}
-The LIS3LV02D may be configured to generate an inertial wake-up/free-fall
+The LIS3LV02DL may be configured to generate an inertial wake-up/free-fall
 interrupt signal when a programmable acceleration threshold is crossed at least
 in one of the three axes.
 
-The LIS3LV02D driver installs a threaded ISR to handle the free-fall detection.
+The LIS3LV02DL driver installs a threaded ISR to handle the free-fall detection.
 Upon receiving an interrupt request the driver reads the acceleration values
 from the sensor and notifies an appropriate event to the input core for being
 dispatched to the user-space.
@@ -778,23 +773,23 @@ input_sync(input);
 
 
 %-------------------------------------------------------------------------------
-\subsection{LIS3LV02D driver settings}
-\label{sec:lis3_dev_settings}
+\subsection{LIS3LV02DL settings}
+\label{sec:lis3_settings}
 
-The customization of the LIS3LV02D settings is done based on \emph{platform data}.
+The customization of the LIS3LV02DL settings is done based on \emph{platform data}.
 These are data attached to a platform device, that are completely specific to
 a given device. It allows the board initialization file to transmit detailed and
 custom information about the device to the driver.
 In this project's context, the platform data is represented in form of a
 \keyword{lis3lv02d\_nhk8815\_platform\_data} structure
-(listing \ref{list:lis3-paltform-data}) which allows to set a number of LIS3LV02D parameters including the acceleration full-range (2g or 6g), free-fall settings,
+(listing \ref{list:lis3-paltform-data}) which allows to set a number of LIS3LV02DL parameters including the acceleration full-range (2g or 6g), free-fall settings,
 polling interval, etc..
 
 \begin{lstlisting}[
 	xleftmargin=15pt,
 	frame = l,
 	numbers = left,
-	caption = {LIS3LV02D driver's platform data
+	caption = {LIS3LV02DL driver's platform data
 		(from \emph{lis3lv02d-nhk8815.h}).},
 	label = {list:lis3-paltform-data}
 ]
@@ -824,7 +819,7 @@ the default values. The code responsible for this action is reported in listing
 	xleftmargin=15pt,
 	frame = l,
 	numbers = left,
-	caption = {Loading of the driver settings
+	caption = {Loading of LIS3LV02DL platform  data
 		(\keyword{lis3lv02d\_probe()} in \emph{lis3lv02d-nhk8815.c}).},
 	label = {list:lis3-check-platform-data}
 ]
@@ -837,17 +832,24 @@ if (!pdata) {
 }
 \end{lstlisting}
 
-The driver's default settings are shown below.
+In listing \ref{list:lis3-platform-data-defaults} are shown the default settings
+for the LIS3LV02DL device as they are defined in \emph{lis3lv02d-nhk8815.c}.
+
+The driver was built as a module and manually loaded into the kernel using the
+\keyword{insmod} program. Upon successful load the driver delivers an information
+message about its settings to the kernel as shown in figure \ref{fig:lis3-insmod}.
+\keyword{lsmod}, executed last produces the list of modules currently loaded into
+the kernel. In this example \keyword{lis3lv02d-nhk8815} is the only one.
 
 \begin{lstlisting}[
 	xleftmargin=15pt,
 	frame = l,
 	numbers = left,
-	caption = {LIS3LV02D driver default setup
+	caption = {LIS3LV02DL default setup
 		(from \emph{lis3lv02d-nhk8815.c}).},
 	label = {list:lis3-platform-data-defaults}
 ]
-/* LIS3LV02D default configuration */
+/* LIS3LV02DL default configuration */
 static const struct lis3lv02d_nhk8815_platform_data
 	lis3lv02d_default_init = {
 
@@ -859,13 +861,150 @@ static const struct lis3lv02d_nhk8815_platform_data
 };
 \end{lstlisting}
 
+\begin{figure*}
+% \centering
+ \includegraphics[width=11.7cm, height=2cm]{./figures/lis3lv02d-insmod.png}
+ \caption{Message showed upon loading LIS3LV02DL module with default settings.}
+ \label{fig:lis3-insmod}
+\end{figure*}
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{I2C bus driver}
 \label{sec:i2c_bus_driver}
 
-Description of the implementation details of the stn8815 i2c bus driver.
+As mentioned in section \ref{sec:nomadik_nhk8815_platform} the STn8815 processor
+integrates two \icc controllers that can be programmed to work in standard, fast
+or high-speed mode. It is designed to operate in a multi-master environment,
+either as a master or as a slave. However, because the STn8815 is the only master
+on board, and seeing that at this time Linux only operates \icc in master mode, 
+the \icc bus driver presented here supports master mode only.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Initialization and probing}
+\label{sec:adapter_init_probe}
+Initializing and probing the STn8815 \icc bus driver is performed in a similar
+way as for LIS3LV02DL client driver (section \ref{sec:lis3_init_probe}), with
+the major difference being that the former uses a \emph{platform bus}.
+
+The platform bus requires that any \icc controller which is controlled by the
+bus driver be registered using a \keyword{platform\_device} structure.
+This structure represents the bus adapter and provides information such as the
+device name, the device resources and the adapter number, to the bus driver.
+
+Usually the registration of the \icc adapters with the platform bus is
+performed by the board initialization file, as the information needed are
+highly board specific. And this case is no exception.
+
+The listing \ref{list:i2c-reg-platform-dev} shows the part relevant to this
+matter, taken from \emph{arch/arm/mach-nomadik/i2c-8815nhk.c}. Because of the
+STn8815 has two \icc adapters, two platform devices need to be defined: one for
+bus 0 and one for bus 1.
+Additionally, the former uses the platform data mechanism to customize the
+driver settings, as opposed to the latter which relies on the driver's defaults
+(see section \ref{} for details about the driver settings).
+
+The \keyword{resource} and \keyword{num\_resources} fields allow to define
+the device resources (for brevity not shown here). These include the
+definition of the memory area (base address and size) and the interrupt number.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the \icc adapter with the platform bus
+		(from \emph{i2c-8815nhk.c}).},
+	label = {list:i2c-reg-platform-dev}
+]
+/* first bus: i2c0 */
+static struct platform_device nhk8815_i2c_dev0 = {
+  .name		= "stn8815_i2c",
+  .id		= 0,
+  .resource	= &nhk8815_i2c_resources[0],
+  .num_resources = 2,
+  .dev		= {
+    .platform_data = &nhk8815_i2c_dev0_data,
+  },
+};
+
+/* second bus: i2c1 */
+static struct platform_device nhk8815_i2c_dev1 = {
+  .name		= "stn8815_i2c",
+  .id		= 1,
+  .resource	= &nhk8815_i2c_resources[2],
+  .num_resources	= 2,
+  /* No platform data: use driver defaults */
+};
+
+static int __init nhk8815_i2c_init(void)
+{
+  ...
+  platform_device_register(&nhk8815_i2c_dev0);
+  ...
+  platform_device_register(&nhk8815_i2c_dev1);
+  ...
+}
+arch_initcall(nhk8815_i2c_init);
+\end{lstlisting}
+
+On the driver's side, the registration with the platform bus is achieved by
+populating a \keyword{struct  platform\_driver} and passing it to the
+macro \keyword{module\_platform\_driver()} as argument (listing
+\ref{list:i2c-reg-platform-drv}).
+The \keyword{driver.name} member holds the driver's name.
+The platform bus simply compares this name against the name of each device
+(as set up in listing \ref{list:i2c-reg-platform-dev}); if they are the same
+the device matches the driver.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the \icc bus driver with the platform bus
+		(from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-reg-platform-drv}
+]
+#define DRIVER_NAME 	"stn8815_i2c"
+
+static struct platform_driver stn8815_i2c_driver = {
+  .probe  = stn8815_i2c_probe,
+  .remove = __devexit_p(stn8815_i2c_remove),
+  .driver = {
+    .name  = DRIVER_NAME,
+    .owner = THIS_MODULE,
+    .pm	= &stn8815_i2c_pm_ops,
+  },
+};
+module_platform_driver(stn8815_i2c_driver);
+\end{lstlisting}
+
+As usual, binding a device to a driver involves calling the driver's 
+\keyword{probe()} function passing a pointer to the device as a parameter.
+The sequence of operations performed on probing are the following:
+\begin{packedenum}
+	\item Get the device resource definitions
+	\item Allocate the appropriate memory and remap it to a virtual address
+		for being accessed by the kernel
+	\item Load the device settings.
+	\item Configure the device hardware.
+	\item Register with the power management system.
+	\item Create the per-device sysfs nodes.
+	\item Request the interrupt and	register the IRQ.
+	\item Set up the \keyword{struct i2c\_adapter} and register the adapter
+		with the \icc core.
+\end{packedenum}
+
+Once all the above steps successfully completes the driver is bounded to the
+devices representing the two STn8815 \icc controllers.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Data transfer}
+\label{sec:adapter_data_transfer}
+
+
 
 
 
@@ -878,7 +1017,7 @@ Description of the tools and scripts used throughout the project.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Conclusion}
+\section{Conclusions}
 
 TODO.
 
