@@ -762,7 +762,7 @@ free-fall ISR as shown below.
 	frame = l,
 	numbers = left,
 	caption = {Notification of a free-fall KEY event
-		(\keyword{lis3lv02d\_isr\_thread()} from \emph{lis3lv02d-nhk8815.c}).},
+		(from \keyword{lis3lv02d\_isr\_thread()} in \emph{lis3lv02d-nhk8815.c}).},
 	label = {list:lis3-isr}
 ]
 /* Report free-fall (KEY) event */
@@ -838,8 +838,8 @@ for the LIS3LV02DL device as they are defined in \emph{lis3lv02d-nhk8815.c}.
 The driver was built as a module and manually loaded into the kernel using the
 \keyword{insmod} program. Upon successful load the driver delivers an information
 message about its settings to the kernel as shown in figure \ref{fig:lis3-insmod}.
-\keyword{lsmod}, executed last produces the list of modules currently loaded into
-the kernel. In this example \keyword{lis3lv02d-nhk8815} is the only one.
+The last command, \keyword{lsmod}, produces the list of modules currently loaded
+into the kernel (only \keyword{lis3lv02d-nhk8815} in this example).
 
 \begin{lstlisting}[
 	xleftmargin=15pt,
@@ -889,8 +889,11 @@ Initializing and probing the STn8815 \icc bus driver is performed in a similar
 way as for LIS3LV02DL client driver (section \ref{sec:lis3_init_probe}), with
 the major difference being that the former uses a \emph{platform bus}.
 
-The platform bus requires that any \icc controller which is controlled by the
-bus driver be registered using a \keyword{platform\_device} structure.
+The platform bus requires that any \icc \emph{adapter} (or equivalently
+\emph{controller})
+\footnote{The two terms are interchangeable in meaning and refer to the
+peripheral device that drives the bus (i.e. the master device)}.
+which is controlled by the bus driver be registered using a \keyword{platform\_device} structure.
 This structure represents the bus adapter and provides information such as the
 device name, the device resources and the adapter number, to the bus driver.
 
@@ -904,7 +907,7 @@ STn8815 has two \icc adapters, two platform devices need to be defined: one for
 bus 0 and one for bus 1.
 Additionally, the former uses the platform data mechanism to customize the
 driver settings, as opposed to the latter which relies on the driver's defaults
-(see section \ref{} for details about the driver settings).
+(see section \ref{sec:adapter_settings} for details about the driver settings).
 
 The \keyword{resource} and \keyword{num\_resources} fields allow to define
 the device resources (for brevity not shown here). These include the
@@ -953,9 +956,9 @@ On the driver's side, the registration with the platform bus is achieved by
 populating a \keyword{struct  platform\_driver} and passing it to the
 macro \keyword{module\_platform\_driver()} as argument (listing
 \ref{list:i2c-reg-platform-drv}).
-The \keyword{driver.name} member holds the driver's name.
-The platform bus simply compares this name against the name of each device
-(as set up in listing \ref{list:i2c-reg-platform-dev}); if they are the same
+The platform bus simply compares the \keyword{driver.name} member against
+the name of each device, as defined in the \keyword{platform\_device} data
+structure (listing \ref{list:i2c-reg-platform-dev}); if they are the same
 the device matches the driver.
 
 \begin{lstlisting}[
@@ -967,6 +970,12 @@ the device matches the driver.
 	label = {list:i2c-reg-platform-drv}
 ]
 #define DRIVER_NAME 	"stn8815_i2c"
+
+static const struct dev_pm_ops stn8815_i2c_pm_ops = {
+  SET_RUNTIME_PM_OPS(stn8815_i2c_runtime_suspend,
+                     stn8815_i2c_runtime_resume,
+                     NULL)
+};
 
 static struct platform_driver stn8815_i2c_driver = {
   .probe  = stn8815_i2c_probe,
@@ -996,7 +1005,7 @@ The sequence of operations performed on probing are the following:
 		with the \icc core.
 \end{packedenum}
 
-Once all the above steps successfully completes the driver is bounded to the
+Once all the above steps successfully complete the driver is bounded to the
 devices representing the two STn8815 \icc controllers.
 
 
@@ -1004,6 +1013,239 @@ devices representing the two STn8815 \icc controllers.
 \subsection{Data transfer}
 \label{sec:adapter_data_transfer}
 
+In the Linux \icc subsystem a bus driver consists of an \emph{adapter driver}
+and an \emph{algorithm driver}. The motivation behind this further division is
+to improve the software reuse and to allow portability. In fact, an algorithm
+driver is intended to contain general code that can be used for a whole class
+of \icc adapters, while each specific adapter driver either depends on one
+algorithm driver, or includes its own implementation.
+
+However, while having a generic algorithm that works for multiple adapters is
+suitable for many cases, in embedded systems, where each \icc bus
+adapter has its own way of interfacing with the processor and the bus,
+it is usual to develop the adapter driver together with its corresponding
+algorithm driver. This is also the case of the STn8815 \icc bus driver.
+
+The bus driver registers with the \icc subsystem by using a
+\keyword{struct i2c\_adapter} that is instantiated and initialized by the
+driver's \keyword{probe()} function, as shown in listing
+\ref{list:i2c-adapter-reg}.
+The \keyword{i2c\_adapter} structure's \keyword{algo} member is set up to
+point to a \keyword{struct i2c\_algorithm} which in turn holds two pointers:
+\begin{packeditems}
+	\item \keyword{master\_xfer} points to the function that implements the
+		actual \icc transmit and receive algorithm.
+	\item \keyword{functionality} points to a function that returns the
+		features supported by the \icc adapter.
+\end{packeditems}
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the \icc adapter (from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-adapter-reg}
+]
+/* I2C algorithm structure */
+static struct i2c_algorithm stn8815_i2c_algo = {
+  .master_xfer   = stn8815_i2c_xfer,
+  .functionality = stn8815_i2c_func,
+};
+
+/* Probe function */
+static int __devinit stn8815_i2c_probe
+	(struct platform_device *pdev)
+{
+  ...
+  adap = kzalloc(sizeof(struct i2c_adapter),
+         GFP_KERNEL);
+  ...
+  adap->algo = &stn8815_i2c_algo;
+  ...
+  err = i2c_add_numbered_adapter(adap);
+  ...
+}
+\end{lstlisting}
+
+To communicate with a client the \icc subsystem offers two class of functions:
+one for \icc plain communication which includes \keyword{i2c\_master\_send()},
+\keyword{i2c\_master\_recv()} and \keyword{i2c\_transfer()}, and a second one
+that uses SMBus commands
+\footnote{SMBus is a subset of \icc}.
+However, whichever method is used, the data transfer relies on the bus driver's
+function pointed to by \keyword{master\_xfer}, as the \icc core ultimately calls
+this function for the actual transfer to take place.
+
+As shown in listing \ref{list:i2c-adapter-reg}, \keyword{stn8815\_i2c\_xfer()}
+is the transfer function installed by the STn8815 \icc bus driver.
+This function receives an array of messages as argument and process
+them in sequence by calling \keyword{stn8815\_i2c\_xfer\_rd()} or
+\keyword{stn8815\_i2c\_xfer\_wr()} depending respectively on whether the message
+being processed is marked for read or write.
+Once all message have been sent \keyword{stn8815\_i2c\_xfer()} succesfully
+returns, otherwise, upon detecting a communication error, aborts the transmission
+and returns an appropriate error code.
+
+The STn8815 \icc bus driver uses the STn8815 \icc controller's interrupt
+capability to handle the data transfer. More precisely it uses interrupts to
+trigger the completion of a transaction and to detect a bus error. Handling
+these interrupts is in charge of \keyword{stn8815\_i2c\_isr()} interrupt service
+routine (ISR).
+Its role is to identify the interrupt source, complete the transaction
+by reporting the result to the \emph{task-level}
+\footnote{\emph{Task-level} refers to code not running in interrupt context
+(as opposed to \emph{interrupt-level})}
+function that initiated it (either \keyword{stn8815\_i2c\_xfer\_wr()} or
+\keyword{stn8815\_i2c\_xfer\_rd()}), and to clear the interrupt condition from
+the \icc controller.
+
+A \emph{completion variable} is used to synchronize between the task-level
+function and the ISR. The former initiates the transmission and waits on the
+completion variable while the \icc controller performs the transaction; upon
+completion, the controller issues an interrupt request which is processed by
+\keyword{stn8815\_i2c\_isr()}; once it has accomplished its job, upon returning
+from interrupt, \keyword{stn8815\_i2c\_isr()} uses the completion variable to
+wake up the task-level function.
+Additionally, a timeout is specified to limit the time spent by the task-level
+function on waiting on the completion variable.
+The whole process is depicted in the sequence diagram of figure
+\ref{fig:i2c-trans-seq-diag}.
+
+The listing \ref{list:i2c-completion-sync} shows how the synchronization
+mechanism is implemented.
+The completion variable is dynamically created and initialized via
+\keyword{init\_completion()} (line 7). Afterwards, a call to
+\keyword{wait\_for\_completion\_timeout()} (line 11) suspends the task until
+either the ISR signals the completion by calling \keyword{complete()} (line 28)
+or the timeout expires.  In either case the return value is tested for error
+conditions.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Task-level and ISR synchronization using a completion variable
+		(from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-completion-sync}
+]
+/* I2C master read */
+static int stn8815_i2c_xfer_rd(
+    struct i2c_adapter *adap,
+    struct i2c_msg *pmsg, bool stop)
+{
+  ...
+  /* Initialize completion */
+  init_completion(&dev->msg_complete);
+  ...
+
+  /* Wait for completion */
+  i = wait_for_completion_timeout(&dev->msg_complete,
+                                  I2C_TIMEOUT);
+  if (i < 0)
+    return i;
+  if (i == 0) {
+    dev_err(dev->dev, "Controller timeout\n");
+    return -ETIMEDOUT;
+  }
+  ...
+}
+
+/* ISR */
+static irqreturn_t stn8815_i2c_isr(int irq,
+	void *dev_id)
+{
+  ...
+  /* Complete */
+  complete(&dev->msg_complete);
+  return IRQ_HANDLED;
+}
+
+\end{lstlisting}
+
+\begin{figure*}
+ \centering
+ \includegraphics[width=14cm, height=8.6cm]
+ 	{./figures/i2c-data-transfer-seq-diag.png}
+ \caption{Sequence diagram of an \icc transaction.}
+ \label{fig:i2c-trans-seq-diag}
+\end{figure*}
+
+
+%-------------------------------------------------------------------------------
+\subsection{Power management}
+\label{sec:adapter_power_management}
+
+The \icc bus driver relies on the power management infrastructure of the Linux
+kernel to achieve run-time power savings. To use this feature the kernel needs
+to be configured with "Runtime power management" (\keyword{CONFIG\_PM\_RUNTIME})
+option enabled.
+
+The functions that implements the driver's power saving policy are registered
+upon registering the driver with the platform bus (refer to listing
+\ref{list:i2c-reg-platform-drv} on page \pageref{list:i2c-reg-platform-drv}).
+This is done by initializing the \keyword{driver.pm} member of the
+\keyword{platform\_driver} structure with a pointer to
+\keyword{struct dev\_pm\_ops} which in turn holds the address of the driver's
+power management functions.
+
+When the power management subsystem in Linux determines that the \icc adapter
+is to be suspended (resumed) it calls \keyword{stn8815\_i2c\_runtime\_suspend()}.
+This function simply disables the \icc controller.  
+When the adapter is to be resumed, \keyword{stn8815\_i2c\_runtime\_resume()} is called and consequently the \icc controller is re-enabled.
+
+
+%-------------------------------------------------------------------------------
+\subsection{\icc bus adapter settings}
+\label{sec:adapter_settings}
+
+As for LIS3LV02DL, the \icc bus driver receives custom settings from the board
+initialization code via the platform data mechanism.
+Looking back at listing \ref{list:i2c-reg-platform-dev}, the adapter 0 uses a
+custom setup (line 8), while the adapter 1 relies on the driver's defaults
+(line 18).
+
+The platform data of the \icc adapter is defined in \emph{i2c-stn8815.h} and
+reported in listing \ref{list:i2c-adapter-platform-data}.
+It is represented in form of a \keyword{i2c\_stn8815\_platform\_data} structure
+and allows to specify the speed mode (standard, fast or high-speed), 
+the bus filtering and the master code.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {STN8815 \icc bus driver's platform data
+		(from \emph{i2c-stn8815.h}).},
+	label = {list:i2c-adapter-platform-data}
+]
+/* Platform data */
+struct i2c_stn8815_platform_data {
+  unsigned char filter;
+  unsigned char speed;
+  unsigned int  master_code;
+}
+\end{lstlisting}
+
+The driver loads the platform data on probing and, if not provided, it uses the default setup as defined by \emph{nhk8815\_i2c\_default\_init}
+(listing \ref{list:i2c-adapter-data-default}).
+The figure \ref{} shows the information message sent to the kerner by the driver
+on successful load.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {STN8815 \icc bus adapter default setup
+		(from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-adapter-data-defaults}
+]
+/* STN8815-I2C platform data default */
+static struct i2c_stn8815_platform_data nhk8815_i2c_default_init = {
+  .filter	= I2C_STN8815_FILTER_NONE,
+  .speed	= I2C_STN8815_SPEED_STANDARD,
+  .master_code = 0,
+};
+\end{lstlisting}
 
 
 
