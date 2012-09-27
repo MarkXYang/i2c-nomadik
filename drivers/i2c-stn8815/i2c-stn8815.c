@@ -30,7 +30,7 @@
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 
-#include <mach/i2c-stn8815.h>
+#include <linux/i2c-stn8815.h>
 
 
 /* Driver name and version */
@@ -622,6 +622,7 @@ err_free_irq:
 err_free_adap:
 	kfree(adap);
 	pm_runtime_put(dev->dev);
+	pm_runtime_disable(dev->dev);
 
 err_io_unmap:
 	iounmap(dev->base);
@@ -646,6 +647,7 @@ static int __devexit stn8815_i2c_remove(struct platform_device *pdev)
 
 	i2c_del_adapter(dev->adapter);
 	kfree(dev->adapter);
+	pm_runtime_disable(dev->dev);
 	iounmap(dev->base);
 
 	platform_set_drvdata(pdev, NULL);
