@@ -29,6 +29,7 @@
 \usepackage{nameref}
 \usepackage{url}
 \usepackage{inconsolata}
+%\usepackage{paralist}
 
 \input{tcilatex}
 %-------------------------------------------------------------------------------
@@ -192,7 +193,7 @@ address. The standard \icc specifies two different addressing schema, 7 and
 
 \begin{figurehere}
  \centering
- \includegraphics[width=6cm, height=3.8cm]{./figures/i2c-diagram.png}
+ \includegraphics[width=6cm]{./figures/i2c-diagram.png}
  \caption{Sample \icc implementation (adapted from \emph{embedded-lab.com}).}
  \label{fig:i2c-implementation}
 \end{figurehere}
@@ -221,7 +222,7 @@ single-master environment.
 
 \begin{figurehere}
  \centering
- \includegraphics[width=8cm, height=3.3cm]{./figures/i2c-transaction.jpg}
+ \includegraphics[width=8cm]{./figures/i2c-transaction.jpg}
  \caption{Sample \icc transaction (adapted from \emph{www.ermicro/blog}).}
  \label{fig:i2c-transaction}
 \end{figurehere}
@@ -242,7 +243,7 @@ whereas the core layer needs not to be changed.
 
 \begin{figurehere}
  \centering
- \includegraphics[width=7.5cm, height=6cm]{./figures/linux-i2c-subsystem.png}
+ \includegraphics[width=7.5cm]{./figures/linux-i2c-subsystem.png}
  \caption{The Linux \icc subsystem (reprinted from \cite{venkateswaran2008eldd},
  		p. 236).}
  \label{fig:linux-i2c-subsystem}
@@ -262,7 +263,7 @@ three-axis accelerometer, etc..
 
 \begin{figurehere}
  \centering
- \includegraphics[width=8cm, height=6.35cm]{./figures/nomadik-nhk8815.jpg}
+ \includegraphics[width=8cm]{./figures/nomadik-nhk8815.jpg}
  \caption{The Nomadik NHK8815 evaluation board.}
  \label{fig:nomadik-nhk8815}
 \end{figurehere}
@@ -357,10 +358,10 @@ In addition, to ease the project management I defined a set of environmental
 variables. A list of them with their definition is presented in table
 \ref{table:project-env-variables}.
 
-Finally, one note about the root filesystem. It was build using BusyBox
-(version 1.18.4). More precisely, I used a tool called \textbf{bbfs 1.3}, 
-developed by \emph{Alessandro Rubini} and released under GNU GPL license
-(see \cite{bbfs1.3} for details).\\
+Finally, a note about the root filesystem. It was built using BusyBox
+version 1.18.4 (\cite{busybox}). More precisely, I used a tool called
+\textbf{bbfs 1.3}, developed by \emph{Alessandro Rubini} and released under
+GNU GPL license (see \cite{bbfs1.3} for details).\\
 
 \begin{tablehere}
 	\centering
@@ -369,10 +370,11 @@ developed by \emph{Alessandro Rubini} and released under GNU GPL license
 		\hline
 		Variable & Decription \\
 		\hline
-		\texttt{PRJROOT} & The project root \\
+		\texttt{PRJROOT} & The project root directory\\
 		\texttt{KERNELDIR} & The root directory of the kernel source tree \\
 		\texttt{PATCHESDIR} & The \emph{linux-3.3.0-patches} directory \\
-		\texttt{ROOTFS} & The directory that holds the root filesystem \\
+		\texttt{ROOTFS} & The directory where is stored the target root
+			filesystem \\
 		\texttt{MODULESDIR} & The directory for temporary holding of the
 			loadable driver modules \\
 		\hline
@@ -394,10 +396,10 @@ developed by \emph{Alessandro Rubini} and released under GNU GPL license
 		\texttt{drivers} & The bus driver and slave driver (one subfolder per
 			each driver) \\
 		\texttt{report} & The \LaTeX sources of this paper \\
-		\texttt{script} & Shell scripts (stored in the root folder of the target
-			filesystem) \\
-		\texttt{tools} & User-space programs to evaluate the drivers (stored in
-			the root folder of the target filesystem) \\
+		\texttt{script} & Shell scripts (copied to the root directory of the
+			target filesystem) \\
+		\texttt{tools} & User-space programs to evaluate the drivers (copied to
+			the root directory of the target filesystem) \\
 		\texttt{images} & The binary image of the kernel and the root
 			filesystem \\
 		\hline
@@ -554,7 +556,7 @@ Sysfs is an in-memory virtual filesystem that provides a view of the kernel's
 structured device model. It offers a convenient yet simple way to implement
 functionality as sysfs attribute in the appropriate directory. An attribute
 provides a way to map kernel data to files in sysfs: a single attribute maps to
-a single file which can be either readable, writable or both, depending on which
+a single file which can be readable, writable or both, depending on which
 functionality it exports.
 
 A driver wishing to use sysfs needs to register the sysfs attributes and implement
@@ -609,7 +611,7 @@ the device identification number (3A for the LIS3LV02DL chip)}.
 
 \begin{figurehere}
  \centering
- \includegraphics[width=8cm, height=3.15cm]{./figures/lis3lv02d-sysfs.png}
+ \includegraphics[width=7.5cm]{./figures/dump-lis3lv02d-sysfs.png}
  \caption{Example of usage of the LIS3LV02DL sysfs interface.}
  \label{fig:lis3-sysfs}
 \end{figurehere}
@@ -625,7 +627,7 @@ their state). In this project's context, the polling device is the target
 cpu while the LIS3LV02DL inertial sensor is the device being polled.
 
 To implement the polling feature the LIS3LV02DL driver registers itself with the
-kernel's \emph{input} subsystem; this involves registering \keyword{open()},
+kernel's \emph{input subsystem}; this involves registering \keyword{open()},
 \keyword{close()} and \keyword{poll()} call-back functions, specifying
 the polling interval, setting up the type of events involved, etc.
 The input subsystem takes care of calling the \keyword{poll()} function at the
@@ -634,7 +636,7 @@ dispatching it to the user-space via sysfs in
 \keyword{/dev/input/eventX} ('X' is a numeric identifier assigned when the
 driver registers with the input core).
 A demonstration of how the device polling works is given in the section
-\ref{sec:tools}, "\nameref{sec:tools}."
+\ref{sec:evdev-testing}.
 
 The listing \ref{list:lis3-poll-enable} shows the sequence of instructions
 required to registers with the input core. The driver executes them upon
@@ -698,8 +700,8 @@ input_unregister_polled_device(priv->input_polled);
 input_free_polled_device(priv->input_polled);
 \end{lstlisting}
 
-Upon loading the LIS3LV02DL driver, the polling function may be either enable
-or not, depending on whether the default or custom settings were used
+Upon loading the LIS3LV02DL driver, the polling function may be either enabled
+or not enabled, depending on whether the default or custom settings were used
 (see section \ref{sec:lis3_settings} for details).
 Once the driver is up and running, the polling can be enabled/disabled via the
 sysfs \keyword{poll\_enable} file, as detailed in the previous section.
@@ -707,7 +709,7 @@ sysfs \keyword{poll\_enable} file, as detailed in the previous section.
 
 %-------------------------------------------------------------------------------
 \subsection{Free-fall detection}
-\label{sec:lis3_poll}
+\label{sec:lis3_free-fall}
 The LIS3LV02DL may be configured to generate an inertial wake-up/free-fall
 interrupt signal when a programmable acceleration threshold is crossed at least
 in one of the three axes.
@@ -863,7 +865,7 @@ static const struct lis3lv02d_nhk8815_platform_data
 
 \begin{figure*}
 % \centering
- \includegraphics[width=11.7cm, height=2cm]{./figures/lis3lv02d-insmod.png}
+ \includegraphics[width=11.8cm]{./figures/dump-lis3lv02d-insmod.png}
  \caption{Message showed upon loading LIS3LV02DL module with default settings.}
  \label{fig:lis3-insmod}
 \end{figure*}
@@ -905,8 +907,8 @@ The listing \ref{list:i2c-reg-platform-dev} shows the part relevant to this
 matter, taken from \emph{arch/arm/mach-nomadik/i2c-8815nhk.c}. Because of the
 STn8815 has two \icc adapters, two platform devices need to be defined: one for
 bus 0 and one for bus 1.
-Additionally, the former uses the platform data mechanism to customize the
-driver settings, as opposed to the latter which relies on the driver's defaults
+In this example the former uses the platform data mechanism to customize the
+driver settings, while to the latter relies on the driver's defaults
 (see section \ref{sec:adapter_settings} for details about the driver settings).
 
 The \keyword{resource} and \keyword{num\_resources} fields allow to define
@@ -1164,7 +1166,7 @@ static irqreturn_t stn8815_i2c_isr(int irq,
 
 \begin{figure*}
  \centering
- \includegraphics[width=14cm, height=8.6cm]
+ \includegraphics[width=16cm]
  	{./figures/i2c-data-transfer-seq-diag.png}
  \caption{Sequence diagram of an \icc transaction.}
  \label{fig:i2c-trans-seq-diag}
@@ -1192,6 +1194,13 @@ When the power management subsystem in Linux determines that the \icc adapter
 is to be suspended (resumed) it calls \keyword{stn8815\_i2c\_runtime\_suspend()}.
 This function simply disables the \icc controller.  
 When the adapter is to be resumed, \keyword{stn8815\_i2c\_runtime\_resume()} is called and consequently the \icc controller is re-enabled.
+
+The power management framework creates for the \icc adapter 0 a set of sysfs
+nodes that allow to query or modify its power status. They are all located in \keyword{/sys/devices/platform/stn8815\_i2c.0/power/}.
+
+For example, typing \keyword{cat runtime\_status} returns the adapter's power
+status, while the command \keyword{echo 'off' > control} disables the adapter's
+runtime power management.
 
 
 %-------------------------------------------------------------------------------
@@ -1227,9 +1236,9 @@ struct i2c_stn8815_platform_data {
 \end{lstlisting}
 
 The driver loads the platform data on probing and, if not provided, it uses the default setup as defined by \emph{nhk8815\_i2c\_default\_init}
-(listing \ref{list:i2c-adapter-data-default}).
-The figure \ref{} shows the information message sent to the kerner by the driver
-on successful load.
+(listing \ref{list:i2c-adapter-data-defaults}).
+The figure \ref{fig:i2c-adapter-insmod} shows the information message sent to
+the kernel by the driver on successful load.
 
 \begin{lstlisting}[
 	xleftmargin=15pt,
@@ -1240,26 +1249,192 @@ on successful load.
 	label = {list:i2c-adapter-data-defaults}
 ]
 /* STN8815-I2C platform data default */
-static struct i2c_stn8815_platform_data nhk8815_i2c_default_init = {
+static struct i2c_stn8815_platform_data
+	nhk8815_i2c_default_init = {
   .filter	= I2C_STN8815_FILTER_NONE,
   .speed	= I2C_STN8815_SPEED_STANDARD,
   .master_code = 0,
 };
 \end{lstlisting}
 
+\begin{figure*}
+% \centering
+ \includegraphics[width=12.4cm, height=1.7cm]{./figures/dump-adapter-insmod.png}
+ \caption{Message showed upon loading the STN8815 \icc bus driver module with
+ 	default settings.}
+ \label{fig:i2c-adapter-insmod}
+\end{figure*}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Testing}
+\label{sec:testing}
+% x contesto dei test (remote console)
+% x lis3 via /sys (partially already explained in previous sections)
+% x lis3 via /dev (evtest)
+% - i2c-dev (don't forget citations) using 'i2cexe' tool and i2cprobe script
+
+As I said in section \ref{sec:project_setup} my choice for this project was
+to work with the official kernel, which yet lacks many drivers necessary to
+fully operate the Nomadik NHK8815 board. Clearly this choice influenced the
+way the design process was conducted.
+For example, the on-board LCD display and keypad were not used for interfacing
+to the system because of the absence of the respective drivers in the kernel.
+Instead, I connected to the target board through a serial line (UART) and
+interfaced with it using a terminal emulator. This was achieved by configuring
+appropriately the bootloader installed on the target, namely U-Boot
+(\cite{uboot}).
+
+A number of tools and scripts were used to help testing the drivers throughout
+the design process. They all run in user-space and interface with the Linux
+kernel, each one using either the \emph{sysfs} interface, the \emph{evdev}
+interface or the \emph{i2c-dev} interface.
+The figure \ref{fig:whole-driver-system} shows a view of the whole driver
+system including the tools mentioned above.
+This section describes some simple techniques that allows to test the drivers
+using these tools. The tests are classified based on the type of interface 
+they rely on.
+
+\begin{figure*}
+ \centering
+ \includegraphics[width=15cm]{./figures/nhk8815-whole-driver-system.png}
+ \caption{The LIS3LV02DL inertial sensor and STn8815 \icc host controller
+ 	complete driver structure.}
+ \label{fig:whole-driver-system}
+\end{figure*}
+
+
+%-------------------------------------------------------------------------------
+\subsection{Testing via the \emph{sysfs} interface}
+\label{sec:sysfs-testing}
+The usage the LIS3LV02DL sysfs interface was previously described in section
+\ref{sec:lis3_sysfs}.
+This interface turns out to be useful also for debugging activity even
+during the early stages of design, when most of the driver functions are yet
+to be implemented.
+An example of this is represented by the sysfs nodes \keyword{read} and
+\keyword{write} which were designed solely to assist debugging (in fact they
+are available only if it is defined the constant \keyword{LIS3LV02D\_DEBUG}
+in the driver source file). 
+
+\keyword{read} and \keyword{write} together are used in the shell script
+\emph{lis3\_read.sh} to implement a simple technique for testing the drivers.
+This script allows to read a user defined set of registers of the accelerometer.
+It has the following syntax:
+\begin{verbatim}
+	lis3_read.sh <filename>
+\end{verbatim}
+where \keyword <filename> refers to a file holding the list of registers with
+their respective address. Below is an example of this file (from \emph{lis3\_registers} provided along with the script):
+
+\begin{lstlisting}[language=bash]
+# ------------------------------------
+# Register name   Register Address
+#                   (hex format)
+# ------------------------------------
+CTRL_REG1               20
+CTRL_REG2               21
+CTRL_REG3               22
+STATUS_REG              27
+FF_WU_CFG               30
+FF_WU_SRC               31
+FF_WU_THS_L             34
+FF_WU_THS_H             35
+FF_WU_DURATION          36
+\end{lstlisting}
+
+For each register in the list \emph{lis3\_read.sh} performs two steps:
+
+\begin{packedenum}
+	\item Sets up the address of the register via sysfs \keyword{write}.
+	\item Reads the address content via sysfs \keyword{read}.
+\end{packedenum}
+
+Below is the output of the script when invoked with \emph{lis3\_registers}
+as a command line parameter.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=7cm]{./figures/dump-lis3-read.png}
+ \caption{Output of the script \emph{lis3\_read.sh} with \emph{lis3\_registers}
+ 	as a register file.}
+ \label{fig:lis3-read}
+\end{figurehere}
+
+
+%-------------------------------------------------------------------------------
+\subsection{Testing via the \emph{evdev} interface}
+\label{sec:evdev-testing}
+
+In Linux the directory \emph{/dev} is conventionally used to store the
+device files, i.e. files representing interfaces for device drivers. They
+allow user programs to access hardware devices through their respective
+drivers. Linux classifies drivers in three categories: character, block and
+network drivers.
+
+LIS3LV02D driver fits in neither of the above three categories, as it doesn't
+create a corresponding device file.
+Consequently it's not possible for a user program to directly operate on the
+accelerometer via a node in \emph{/dev}.
+Instead, upon enabling the device polling, an indirect access is provided by
+the \emph{evdev} interface of the input subsystem via a
+\keyword{/dev/input/eventX} node.
+The accelerometer driver reports the events to the input core, which in turn
+writes them to this file in an appropriate format for being processed by a user
+program.
+
+An example of such a program is \emph{evtest} \cite{evtest}. It is a free
+software released under GNU GPL license and available online in many versions;
+1.23 is the one used in this project. This tool allows to display the events
+reported by an input device. Below it is shown a sample output from evtest on
+the target system.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/dump-evtest.png}
+ \caption{Example of usage of \emph{evtest}.}
+ \label{fig:evtest-dump}
+\end{figurehere}
+
+Initially evtest shows some information about the input device and its supported
+event types (Sync, Key and Absolute) then, starting from the line
+\keyword{Testing ... (interrupt to exit)}, keeps displaying any data from the
+event node.
+Since the accelerometer driver terminates each notification by a "sync" event, 
+from the sample dump we can identify three distinct groups of events.
+Both the first and the second groups represent absolute events corresponding to
+the acceleration measured along the three cartesian axes.
+The third group regards the free-fall which is reported as a key press
+(value 1) and release (value 0) sequence of events.
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{Testing via the \emph{i2c-dev} interface}
+\label{sec:i2c-dev-testing}
+
+The \emph{i2c-dev} interface was designed to allow driving the \icc devices from
+user space. Each \icc adapter is assigned a number, say \keyword{X}, and a
+corresponding device file is created in \keyword{/dev/i2c-X}.
+It is indeed possible for a user mode driver to access an \icc client by
+operating the adapter \keyword{X} through its node \keyword{/dev/i2c-X}.
+
+However, in this project the \emph{i2c-dev} interface was used with the only
+purpose of testing the \icc bus driver. To this aim I designed a user program
+called \emph{i2cexe} which allows to transmit \icc messages to a generic client.
+In the above scenario this tool plays the role of a user mode device driver
+without effectively being a real driver, as it performs only a single \icc 
+transaction (either read or write).
+
+It should be noticed that, as opposed to the previous methods, this test
+requires no \icc client driver whatsoever, i.e. the test applies to the \icc bus driver only.
+Additionally, the Linux kernel must be configured with with "I2C device interface" (\keyword{CONFIG\_I2C\_DEV}) option enabled.
+
 
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Tools}
-\label{sec:tools}
-
-Description of the tools and scripts used throughout the project.
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Conclusions}
+\section{Conclusion}
 
 TODO.
 
@@ -1267,7 +1442,9 @@ TODO.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Add all references without citing
-%\nocite{_bibtexkey_}
+\nocite{nxp-i2c-spec}
+\nocite{linux-kernel-archive}
+
 
 % We suggest the use of JabRef for editing your bibliography file (Report.bib)
 \bibliographystyle{splncs}
