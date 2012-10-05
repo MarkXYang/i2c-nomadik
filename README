@@ -1,0 +1,15 @@
+=== I2C on Nomadik NHK8815 running GNU/Linux ===
+
+This project concerns design and development of an i2c bus driver
+and an i2c client driver for the Nomadik NHK8815 evaluation board.
+
+The repository is structured as follow:
+  drivers/               source code of the i2c device drivers
+  report/                the report of the project both in pdf and latex formats
+  scripts/               shell scripts for the target system
+  tools/                 user programs for the target system
+  linux-3.3.0-patches/   the patches to the Linux kernel plus the kernel
+                         configuration file
+  sdcard/                uboot command file, kernel images and the ramdisk
+
+For more detailed information please refer to the file report/Report.pdf
