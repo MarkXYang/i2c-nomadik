@@ -1,0 +1,5 @@
+This folder holds the files needed to boot the board from the SD card:
+
+  command.txt       uboot command file
+  ramdisk.cpio.gz   ramdisk with the root filesystem
+  uImage-3.3.0      kernel image

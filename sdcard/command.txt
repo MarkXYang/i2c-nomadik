@@ -1,0 +1,1 @@
+copy_file_mmc uImage-3.3.0 0x100000 ; copy_file_mmc ramdisk.cpio.gz 0x800000 ; setenv bootargs root=/dev/ram0 initrd=0x800000,0x58DC9F ramdisk_size=0x8000 console=ttyAMA1,115200n8 init=/bin/sh; bootm 0x100000
