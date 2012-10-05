@@ -20,6 +20,22 @@
 *.symvers
 
 #
+# Rules for report
+#
+*~
+*.aux
+*.aux.bak
+*.bbl
+*.blg
+*.dvi
+*.log
+*.ps
+*.pdf
+*.swp
+
+
+#
 # git files that we don't want to ignore even it they are dot-files
 #
 !.gitignore
+!report/Report.pdf

@@ -1,0 +1,1593 @@
+% VDE Template for EUSAR Papers
+% Provided by Barbara Lang und Siegmar Lampe
+% University of Bremen, January 2002
+% English version by Jens Fischer
+% German Aerospace Center (DLR), December 2005
+% Additional modifications by Matthias Wei{\ss}
+% FGAN, January 2009
+
+%-----------------------------------------------------------------------------
+% Type of publication
+\documentclass[a4paper,10pt]{article}
+%-----------------------------------------------------------------------------
+% Other packets: Most packets may be downloaded from www.dante.de and
+% "tcilatex.tex" can be found at (December 2005):
+% http://www.mackichan.com/techtalk/v30/UsingFloat.htm
+% Not all packets are necessarily needed:
+\usepackage[T1]{fontenc}
+\usepackage[latin1]{inputenc}
+%\usepackage{ngerman} % in german language if required
+\usepackage[nooneline,bf]{caption} % Figure descriptions from left margin
+\usepackage{times}
+\usepackage{multicol}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{epsfig}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{nameref}
+\usepackage{url}
+\usepackage{inconsolata}
+%\usepackage{paralist}
+
+\input{tcilatex}
+%-------------------------------------------------------------------------------
+% Page Setup
+\textheight24cm \textwidth17cm \columnsep6mm
+\oddsidemargin-5mm                 % depending on print drivers!
+\evensidemargin-5mm                % required margin size: 2cm
+\headheight0cm \headsep0cm \topmargin0cm \parindent0cm
+\pagestyle{empty}                  % delete footer and header
+%------------------------------------------------------------------------------
+% Environment definitions
+\newenvironment*{mytitle}{\begin{LARGE}\bf}{\end{LARGE}\\}%
+\newenvironment*{mysubtitle}{\bf}{\\[1.5ex]}%
+\newenvironment*{myabstract}{\begin{Large}\bf}{\end{Large}\\[2.5ex]}%
+%-------------------------------------------------------------------------------
+% Using Pictures and tables:
+% - Instead "table" write "tablehere" without parameters
+% - Instead "figure" write "figurehere " without parameters
+% - Please insert a blank line before and after \begin{figuerhere} ... \end{figurehere}
+%
+% CAUTION:   The first reference to a figure/table in the text should be formatted fat.
+%
+
+\makeatletter
+\newenvironment{tablehere}{\def\@captype{table}}{}
+\newenvironment{figurehere}{\def\@captype{figure}\vspace{2ex}}{\vspace{2ex}}
+\makeatother
+
+\newenvironment{packeditems}{
+\begin{itemize}
+  \setlength{\itemsep}{3pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{itemize}}
+
+\newenvironment{packedenum}{
+\begin{enumerate}
+  \setlength{\itemsep}{3pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{enumerate}}
+
+\newenvironment{packeddesc}{
+\begin{description}
+  \setlength{\itemsep}{3pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{description}}
+
+\definecolor{lightblue}{rgb}{0.0,0.0,0.7}
+\definecolor{lightgrey}{rgb}{0.6,0.6,0.6}
+
+\newcommand{\iic}{I\textsuperscript{2}C }
+\newcommand{\keyword}[1]{\texttt{#1}}
+\newcommand{\reff}[1]{\textbf{Figure~\ref{#1}}}
+\newcommand{\reft}[1]{\textbf{Table~\ref{#1}}}
+\newcommand{\refl}[1]{\textbf{Listing~\ref{#1}}}
+
+% lstlisting global parameters
+\lstset{
+	language=C,
+	basicstyle=\scriptsize\ttfamily,
+	keywordstyle=\color{lightblue},
+	commentstyle=\color{lightgrey},
+	captionpos=b,	% caption at the bottom of listing
+	xleftmargin=6pt,
+	xrightmargin=6pt,
+	framexleftmargin=4pt,
+	framexrightmargin=4pt,
+	aboveskip=12pt,
+	belowskip=12pt
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+% Please use capital letters in the beginning of important words as for example
+\begin{mytitle}\iic on a Linux based embedded system\end{mytitle}
+\begin{mysubtitle}
+Design of a bus driver and a client driver for the Nomadik NHK8815 platform
+\end{mysubtitle}
+%
+% Please do not insert a line here
+%
+\\
+Ghiringhelli Fabrizio\\
+Matr. 753368, (fabrizio.ghiringhelli@mail.polimi.it)\\
+\hspace{10ex}
+\begin{flushright}
+\emph{Report for the master course of Embedded Systems}\\
+\emph{Reviser: PhD. Patrick Bellasi (bellasi@elet.polimi.it)}
+\end{flushright}
+
+Received: October, 5\textsuperscript{th} 2012\\
+\hspace{10ex}
+
+
+%-------------------------------------------------------------------------------
+\begin{myabstract} Abstract \end{myabstract}
+This article describes design and development of \iic device drivers for
+the Nomadik NHK8815 evaluation board running GNU/Linux. Specifically, attention
+is given to the implementation of drivers for an \iic bus controller of the ST
+Microelectronics STn8815 System On Chip (SOC), and for an \iic bus client, namely 
+the LIS3LV02DL three-axis accelerometer. Both devices equip the NHK8815 board.
+The intended outcome of this work is to give a contribution in understanding how
+to access \iic devices on any Linux based systems, not only embedded systems.
+This is the reason why I focus on both a bus driver and a client driver.
+Besides, some testing techniques along with some solutions to interface the
+drivers with the user space are presented in some detail.
+
+
+\vspace{6ex}	% Please do not remove or reduce this space here.
+\begin{multicols}{2}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+Today Linux is the operating system choice for many computer systems which
+include, not only desktop and server supercomputers, but also a wide range of 
+special-purpose electronic devices known as embedded systems.
+An embedded system is specifically designed to perform a set of designated
+activities, and it generally uses custom, heterogeneous processors. This makes
+Linux a flexible operating system capable of running on a variety of
+architectures, such as ARM, PowerPC, MIPS, SPARC, x86, and many others.
+
+However, this flexibility doesn't come for free. While it's true that the
+Linux highly modular architecture facilitates the porting phase, still a
+lot of efforts are required to build new kernel components to fully
+support the target platform.
+
+A big part of these efforts are in developing the low-level interfaces
+commonly referred to as \emph{device drivers}.
+A device driver (driver for short) is a piece of software designed to direct
+control a specific hardware resource using an hardware-independent well defined
+interface.
+
+This paper details the design of two \iic drivers for the Nomadik NHK8815
+platform: a client driver for an on-board inertial sensor, presented in
+section \ref{sec:i2c_client_driver}, and a bus driver for the \iic controller
+of the SOC (section \ref{sec:i2c_bus_driver}).
+Section \ref{sec:testing} is dedicated to testing issues.
+
+The rest of this section provides an overview of the \iic protocol
+(\ref{sec:i2c_protocol_overview}), a brief description of the NHK8815 evaluation
+board (\ref{sec:nomadik_nhk8815_platform}), and detail information regarding
+the project environment (\ref{sec:project_setup}).
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{I\textsuperscript{2}C protocol overview}
+\label{sec:i2c_protocol_overview}
+The Inter-Integrated Circuit, or \iic, is a synchronous master-slave messaging
+protocol designed to connect a pool of devices by means of a two-wire bus.
+It is a simple and low-bandwidth protocol which allows for short-distance on
+board communications, while being extremely modest in its hardware resource
+requirements. The original standard specified a standard clock rate of 100KHz.
+Later updates to the standard introduced a fast speed of 400KHz and a high speed
+of 1.7 or 3.4 MHz.
+
+The \iic bus consists of two bi-directional lines, one line for data (SDA)
+and one for clock (SCL), by means of which a single master device can send
+informations serially to one ore more slave devices
+(\reff{fig:i2c-implementation}).
+To prevent any conflict every device hooked up to the bus has its own unique
+address. The standard \iic specifies two different addressing schema, 7 and
+10 bits, allowing at most 128 and 1024 devices connected at the same time.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=6cm]{./figures/i2c-diagram.png}
+ \caption{Sample \iic implementation (adapted from \emph{embedded-lab.com}).}
+ \label{fig:i2c-implementation}
+\end{figurehere}
+
+Each \iic transaction is always initiated by the master which is in charge of
+the bus for the entire duration of the transaction, meaning that it controls the
+clock and generates the START and STOP sequences. The start and stop sequences
+mark the beginning and the end of a transaction and are the only places where
+the SDA line is allowed to change while the SCL is high.
+
+All data are transfered one byte at a time. In 7-bit addressing mode, the slave
+address occupies the seven most significant bits of the first byte, with the
+least significant bit serving as a read/write flag to indicate whether data
+will be written to the slave ('0') or data will be read from the slave ('1').
+For every byte received, the slave device sends back an acknowledge bit.
+\reff{fig:i2c-transaction} shows an example of a typical \iic
+transaction.
+
+The \iic protocol supports multiple masters. In a multi-master environment two
+or more masters may simultaneously attempt to initiate a data transfer.
+In such a scenario, each master must be able to detect a collision and to follow
+the arbitration logic that leeds to the election of a winner master. The winner
+master can then safely begin its transaction.
+The Nomadik NHK8815 platform, like most system designs, operates in a 
+single-master environment.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/i2c-transaction.jpg}
+ \caption{Sample \iic transaction (adapted from \emph{www.ermicro/blog}).}
+ \label{fig:i2c-transaction}
+\end{figurehere}
+
+\emph{The Linux \iic subsystem}\\[6pt]
+The Linux kernel \iic framework consists of a core layer where resides all the
+routines and data structures available to bus drivers and client drivers
+(\reff{fig:linux-i2c-subsystem}).
+The core also provides a level of indirection that allows the underlying drivers
+to change from one system to another without affecting \iic subsystem that
+relies on them.
+
+This philosophy of a core layer and its attendant benefits is an example of how
+Linux helps portability. For instance, enabling \iic on a new platform (which is
+precisely the objective of this project) requires only to design the
+hardware-dependent components, namely the bus driver and the client drivers,
+whereas the core layer needs not to be changed.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=7.5cm]{./figures/linux-i2c-subsystem.png}
+ \caption{The Linux \iic subsystem (reprinted from \cite{venkateswaran2008eldd},
+ 		p. 236).}
+ \label{fig:linux-i2c-subsystem}
+\end{figurehere}
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{The Nomadik NHK8815 platform}
+\label{sec:nomadik_nhk8815_platform}
+The NHK8815 is a full-featured evaluation board for the ST Microelectronics
+Nomadik STn8815 (\reff{fig:nomadik-nhk8815}). It is a fan-less embedded
+computer equipped with a wide range of peripheral devices including USB, UART,
+LAN, WLAN, Bluetooth, FM radio, SIM card reader, SD/MMC card reader, color LCD
+with touch screen controller, key-pad, video encoder, audio codec, FM radio,
+three-axis accelerometer, etc..
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=7.5cm]{./figures/nomadik-nhk8815.jpg}
+ \caption{The Nomadik NHK8815 evaluation board.}
+ \label{fig:nomadik-nhk8815}
+\end{figurehere}
+
+The core of the board is the Nomadik STn8815 multimedia application processor.
+The STn8815 is a \emph{System On Chip} that combines an ARM9 core up to 332MHz
+with level-two cache to audio, video, imaging and graphics accelerators.
+
+Among other peripherals, the STn8815 integrates two \iic high speed controllers
+that support the physical and data-link layer of the \iic protocol.
+Below is a list of the \iic controllers' main features:
+\begin{packeditems}
+	\item Slave transmitter/receiver and master transmitter/receiver modes.
+	\item Standard (100kHz), fast (400kHz) and high-speed (3,4MHz) baud rates.
+	\item 7-bit or 10-bit addressing.
+	\item Compliance with \iic standards.
+\end{packeditems}
+
+In a traditional \iic bus topology such as the one in figure
+\ref{fig:i2c-implementation}, the STn8815 \iic embedded controller plays the
+role of the master. In order for the controller to access the \iic bus, a
+corresponding driver must be implemented and registered with the \iic
+subsystem. This step is covered in section \ref{sec:i2c_bus_driver},
+"\nameref{sec:i2c_bus_driver}."
+
+Because on the NHK8815 evaluation board the majority of the on-board peripheral
+devices is connected to the STn8815 \iic bus 0, in this project I focus the
+attention on this bus rather than on bus 1.
+\reft{table:i2c-device-addresses} reports the list of devices on 
+the \iic bus 0, with their 7-bit address.
+
+Just like in the case of the bus driver, in order for each slave device
+to function a corresponding driver must be registred to the \iic subsystem.
+My choice for this project was the LIS3LV02DL, a MEMS inertial sensor mapped
+at the address 1D on the Nomadik board.
+The design of the LIS3LV02DL driver is detailed in section
+\ref{sec:i2c_client_driver}, "\nameref{sec:i2c_client_driver}."\\[6pt]
+
+\begin{tablehere}
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{l l c}
+		\hline
+		Device type & Description & 7-bit address \\
+		\hline
+		STw5095 & Stereo audio codec & 1A \\
+		LIS3LV02DL & Inertial sensor & 1D \\
+		STw8009 & Video digital encoder	 & 21 \\
+		TDA8023TT & Smart Card interface & 22,23 \\
+		STw4811 & Power management & 2D \\
+		STMPE2401 & Port expanders & 43,44 \\
+		TSC2003IPW & Touch screen controller & 48 \\
+		STw4102 & Battery charger & 70 \\
+		\hline
+	\end{tabular}
+	\caption{Device address map of NHK8815 \iic bus 0.}
+	\label{table:i2c-device-addresses}
+\end{tablehere}
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{Project setup}
+\label{sec:project_setup}
+
+The first step to the project is to get the Linux kernel source and to configure
+it for the target board. Instead of  using a vendor supplied kernel such as like
+STLinux, my personal strategy for this project was to work with the official
+kernel from \emph{www.kernel.org}.
+This decision was motivated by the need to keep the development process as neat
+as possible, and to avoid performing tasks that are not strictly concerned with
+the project.
+
+It should be noted that the official kernel offers only limited support for the
+Nomadik  NHK8815 platform.
+This includes basic definitions and register addresses, interrupt management,
+resource definitions and timers.
+A generic \iic bus driver that uses general purpose I/O lines for the interface 
+(i.e. \emph{i2c-gpio} and \emph{i2c-algo-bit}) is also included in the kernel,
+but no driver for the NHK8815 \iic on-board devices is provided whatsoever.
+
+Here is how I proceeded to set up the project environment.
+First, I cloned the git repository at kernel.org on a local machine folder
+located \underline{outside} the project workspace. Then, from the tag \emph{3.3}
+I created a new branch called \emph{i2cdevel}, where to commit the kernel updates.
+My rule was to generate one patch per commit. All patches are numbered in
+sequence and stored in a folder \underline{inside} the project workspace called
+\emph{linux-3.3.0-patches}.
+
+One benefit of this approach is that the project workspace, which is a git
+repository as required, also holds all the data needed to obtain the modified
+kernel from the official one.
+\reft{table:project-dir-layout} shows the project workspace layout.
+In addition, to ease the project management I defined a set of environmental
+variables. as listed in \reft{table:project-env-variables}.
+
+Finally, a note about the root filesystem. It was built using BusyBox
+version 1.18.4 (\cite{busybox}). More precisely, I used a tool called
+\emph{bbfs 1.3}, developed by \emph{Alessandro Rubini} and released under
+GNU GPL license (see \cite{bbfs1.3} for details).\\
+
+\begin{tablehere}
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{l p{5.5cm}}
+		\hline
+		Variable & Decription \\
+		\hline
+		\texttt{PRJROOT} & The project root directory\\
+		\texttt{KERNELDIR} & The root directory of the kernel source tree \\
+		\texttt{PATCHESDIR} & The \emph{linux-3.3.0-patches} directory \\
+		\texttt{ROOTFS} & The directory where is stored the target root
+			filesystem \\
+		\texttt{MODULESDIR} & The directory for temporary holding of the
+			loadable driver modules \\
+		\hline
+	\end{tabular}
+	\caption{Project environmental variables.}
+	\label{table:project-env-variables}
+\end{tablehere}
+
+\begin{table*}[t]
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{p{4cm} p{12cm}}
+		\hline
+		Directory & Content \\
+		\hline
+		\texttt{linux-3.3.0-patches} & Patches to the Linux kernel and 
+			kernel configuration file \emph{.config}\\
+		\texttt{drivers} & \iic bus driver and client driver (one subfolder per
+			each driver) \\
+		\texttt{report} & The \LaTeX sources of this paper \\
+		\texttt{script} & Shell scripts (copied to the root directory of the
+			target filesystem) \\
+		\texttt{tools} & User-space programs to evaluate the drivers (copied to
+			the root directory of the target filesystem) \\
+		\texttt{sdcard} & U-Boot command file, kernel binary image
+			and ramdisk with the root filesystem \\
+		\hline
+	\end{tabular}
+	\caption{Project directory layout.}
+	\label{table:project-dir-layout}
+\end{table*}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{I2C client driver}
+\label{sec:i2c_client_driver}
+
+This section describes the design of the driver for the LIS3LV02DL inertial
+sensor which equips the NHK8815 evaluation board.
+The LIS3LV02DL is a three axes linear accelerometer that provides the measurement 
+acceleration signals to the external world through an \iic interface.
+The LIS3LV02DL driver was written before the bus driver. Its debug was possible
+by using the gpio-based \iic bus driver available in the original kernel. Once
+completed and tested, the LIS3LV02DL driver was then used for debugging the
+STN8815 \iic bus driver.
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{Initializing and probing}
+\label{sec:lis3_init_probe}
+
+During initialization the driver registers itself with the \iic core. This
+is achieved by populating a \keyword{struct i2c\_driver} and passing it
+as argument to the function \keyword{i2c\_add\_driver()}, as shown in
+\refl{list:lis3-i2cdrv-registration}.
+
+The structure \keyword{i2c\_driver} holds pointers to the probe and remove
+functions that are executed respectively on device probing and when the device
+is removed (if ever).
+The \keyword{id\_table} member of the structure \keyword{i2c\_driver} informs
+the \iic framework about which slave devices are supported by the driver.
+In this case the only chip supported is named \keyword{lis3lv02d}.
+The names of the supported devices are important for \emph{binding}, as
+explained next.
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers=left,
+	caption = {Registration of the LIS3LV02DL driver
+		(from \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-i2cdrv-registration}
+]
+/* Device and driver names */
+#define	DEVICE_NAME		"lis3lv02d"
+
+/* I2C client structure */
+static struct i2c_device_id lis3lv02d_idtable[] = {
+  { DEVICE_NAME, 0 },
+  {}
+};
+MODULE_DEVICE_TABLE(i2c, lis3lv02d_idtable);
+
+static struct i2c_driver lis3lv02d_driver = {
+  .driver   = {
+    .name = DRIVER_NAME
+  },
+  .probe    = lis3lv02d_probe,
+  .remove   = __devexit_p(lis3lv02d_remove),
+  .id_table = lis3lv02d_idtable,
+};
+
+/* Module init */
+static int __init lis3lv02d_init(void)
+{
+  return i2c_add_driver(&lis3lv02d_driver);
+}
+\end{lstlisting}
+
+The binding process consists of associating a device with a driver that can
+control it. In embedded systems where the number of the \iic bus and the
+devices connected to it are known for a fact, it is possible to declare in
+advance the \iic slaves which live on the bus. This is typically done in the
+board setup file (\refl{list:lis3-i2cdev-declaration}).
+
+The \keyword{nhk8815\_platform\_init} function is executed on board startup
+and, among other tasks, registers the \iic slave devices by invoking the
+\keyword{i2c\_register\_board\_info} function with arguments that specify
+the number of the bus (zero in this case) and the devices connected with it.
+This is done through an array of \keyword{struct i2c\_board\_info()}, each item
+of which specifies the device name and the device address, with the former that
+must match with the name registered by the driver in order for binding to succeed.
+In this case \keyword{struct i2c\_board\_info} holds only one item which
+corresponds to the LIS3LV02DL inertial sensor.
+
+Seeing that this sensor's chip has an interrupt line tied to the cpu (gpio 82),
+the \keyword{irq} member is also specified with the respective IRQ number.
+By means of another member called \keyword{platform\_data} it is possible to
+define custom data for the driver; if not specified like in this case, the
+driver uses its default settings, as explained in section
+\ref{sec:lis3_settings}.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the \iic devices (from \emph{board-nhk8815.c}).},
+	label = {list:lis3-i2cdev-declaration}
+]
+/* I2C devices */
+static struct i2c_board_info nhk8815_i2c_devices[] = {
+  {
+    I2C_BOARD_INFO("lis3lv02d", 0x1D),
+    .irq = NOMADIK_GPIO_TO_IRQ(82),
+    /* No platform data: use driver defaults */
+  },
+};
+
+static void __init nhk8815_platform_init(void)
+{
+  ...
+  /* Register I2C devices on bus #0 (scl0, sda0) */
+  i2c_register_board_info(0, nhk8815_i2c_devices,
+    ARRAY_SIZE(nhk8815_i2c_devices));
+  ...
+}
+\end{lstlisting}
+
+During boot the kernel looks for any \iic driver that has registered a matching
+device name, that is "lis3lv02d". Upon finding such a driver, the kernel
+invokes its \keyword{probe()} function passing a pointer to the LIS3LV02DL
+device as a parameter. This process is called \emph{probing}.
+
+The probe function is responsible for the per-device initialization, that is
+initializing hardware, allocating resources, and registering the device with
+any appropriate subsystem. More in detail, the LIS3LV02DL probe function
+takes the following actions:
+\begin{packedenum}
+	\item Allocate memory for \keyword{lis3lv02d\_priv} private data structure.
+	\item Load the device settings.
+	\item Idendify the LIS3LV02DL chip.
+	\item Configure the device hardware.
+	\item Create the per-device sysfs nodes.
+	\item If the free-fall feature is enabled, request the interrupt and
+		register the IRQ for the free-fall detection.
+	\item If the device polling feature is enabled, register the device with
+		the input subsystem.
+\end{packedenum}
+On successful completion of all the above steps, meaning a successful probing,
+the device is bound to the driver.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Sysfs interface}
+\label{sec:lis3_sysfs}
+
+Sysfs is an in-memory virtual filesystem that provides a view of the kernel's
+structured device model. It offers a convenient yet simple way to implement
+functionality as sysfs attribute in the appropriate directory. An attribute
+provides a way to map kernel data to files in sysfs: a single attribute maps to
+a single file which can be readable, writable or both, depending on which
+function it exports.
+
+A driver wishing to use sysfs needs to register the sysfs attributes and implement
+their respective functions. \reft{table:lis3-sysfs-attributes} shows
+the list of sysfs nodes handled by the LIS3LV02DL driver. They are located in
+\keyword{/sys/devices/platform/lis3lv02d/}.\\
+
+\begin{tablehere}
+	\centering
+	\renewcommand{\arraystretch}{1.2}	
+	\begin{tabular}{l c p{4cm}}
+		\hline
+		Attribute & Access & Function \\
+		\hline
+		\texttt{position} & r & Show the acceleration along the x,y,z axis \\
+		\hline
+		\texttt{enable} & r & Show the enable status of the device \\
+						& w & Enable/disable the device \\
+		\hline
+		\texttt{ff\_enable} & r & Show the enable status of the free-fall 
+					 			  feature \\
+		\hline
+		\texttt{poll\_enable} & r & Show the enable status of the polling
+									feature \\
+							  & w & Enable/disable the device polling \\
+		\hline
+		\texttt{read} & r & Read the register at the current address \\
+					  & w & Set the current address for reading \\
+		\hline
+		\texttt{write} & w & Write a register. The low byte holds the register
+							 value and the high byte holds the register address \\
+		\hline
+	\end{tabular}
+	\caption{LIS3LV02DL sysfs attributes.}
+	\label{table:lis3-sysfs-attributes}
+\end{tablehere}
+
+Below is a dump of a shell session executed on the target board, providing a
+short demonstration of how to play with the LIS3LV02DL sysfs interface.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=7.5cm]{./figures/dump-lis3lv02d-sysfs.png}
+ \caption{Example of usage of the LIS3LV02DL sysfs interface.}
+ \label{fig:lis3-sysfs}
+\end{figurehere}
+
+The \keyword{cat enable} command returned 'n', meaning that the device was
+disabled.
+Turning the device on is achieved by typing \keyword{echo 1 > enable}.
+The \keyword{cat position} command returned the values 56, -4, 1043 which
+correspond to to acceleration along the x-y-z axes, measured in $mg$.
+\keyword{cat ff\_anable} showed that the free-fall feature is enabled.
+The last two commands perform a reading at the address 0F, getting as answer 3A.
+\footnote{0F is the address of the \keyword{WHO\_AM\_I} register which holds
+the device identification number (3A for the LIS3LV02DL chip)}.
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{Device polling}
+\label{sec:lis3_poll}
+
+Generally speaking \emph{polling} is a technique in which one device periodically
+monitors multiple other devices or makes requests from those devices (e.g. check
+their state). In this project's context, the polling device is the SOC while the
+LIS3LV02DL inertial sensor is the device being polled.
+
+To implement the polling feature the LIS3LV02DL driver registers itself with the
+kernel's \emph{input subsystem}; this involves registering \keyword{open()},
+\keyword{close()} and \keyword{poll()} call-back functions, specifying
+the polling interval, setting up the type of events involved, etc.
+The input subsystem takes care of calling the \keyword{poll()} function at the
+specified rate, registering any event notification reported by the driver and
+dispatching it to the user-space via sysfs in
+\keyword{/dev/input/eventX} ('X' is a numeric identifier assigned when the
+driver registers with the input core).
+A demonstration of how the device polling works is given in the section
+\ref{sec:evdev-testing}.
+
+\refl{list:lis3-poll-enable} shows the sequence of instructions required to
+registers with the input core. The driver executes them upon enabling polling.
+It allocates the input device, installs the callback function pointers (lines
+8-10), programs the ABS events related to the x,y,z
+acceleration data (lines 14-17), and registers the input device (line 26).
+Lines 20 through 23 relates to the free-fall feature which is explained in
+the next section.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Device registration with the input subsystem
+		(from \keyword{lis3lv02d\_poll\_enable()} in
+		\emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-poll-enable}
+]
+struct input_polled_dev *input_polled;
+struct input_dev *input;
+
+/* Allocate memory for the input device */
+input_polled = input_allocate_polled_device();
+
+/* Setup input parameters */
+input_polled->open = lis3lv02d_open;
+input_polled->close = lis3lv02d_close;
+input_polled->poll = lis3lv02d_poll;
+input = input_polled->input;
+
+/* Setup ABS input events */
+set_bit(EV_ABS, input->evbit);
+set_bit(ABS_X, input->absbit);
+set_bit(ABS_Y, input->absbit);
+set_bit(ABS_Z, input->absbit);
+
+/* Setup KEY event for free-fall (only if enabled) */
+if (priv->ff_enabled) {
+  set_bit(EV_KEY, input->evbit);
+  set_bit(KEY_FREE_FALL, input->keybit);
+}
+
+/* Register input polled device */
+input_register_polled_device(input_polled);
+\end{lstlisting}
+
+To disable polling the driver unregisters the input device and frees its
+previously allocated memory, as shown below.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Device unregistration
+		(from \keyword{lis3lv02d\_poll\_disable()} in 
+		\emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-poll-disable}
+]
+/* Unregister input device */
+input_unregister_polled_device(priv->input_polled);
+input_free_polled_device(priv->input_polled);
+\end{lstlisting}
+
+Upon loading the LIS3LV02DL driver, the polling function may be either enabled
+or not enabled, depending on whether the default or custom settings were used
+(see section \ref{sec:lis3_settings} for details).
+Once the driver is up and running, the polling can be enabled/disabled via the
+sysfs \keyword{poll\_enable} file.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Free-fall detection}
+\label{sec:lis3_free-fall}
+The LIS3LV02DL may be configured to generate an inertial wake-up/free-fall
+interrupt signal when a programmable acceleration threshold is crossed at least
+in one of the three axes.
+
+The LIS3LV02DL driver installs a threaded ISR to handle the free-fall detection.
+Upon receiving an interrupt request the driver reads the acceleration values
+from the sensor and notifies an appropriate event to the input core for being
+dispatched to the user-space.
+Indeed the driver relies on the input subsystem to "inform" the user-space
+about a free-fall event. This implies that the device polling be enabled.
+
+Usage of the free-fall feature can be enabled only statically (i.e at compile
+time) either by adjusting the driver's defaults or by passing custom settings
+from the board initialization code (through \keyword{platfom\_data}).
+From user-space the free-fall enable status can be seen via the sysfs
+\keyword{ff\_enable} file (see table \ref{table:lis3-sysfs-attributes}).
+
+If the free-fall is enabled, the driver's \keyword{probe()} registers the IRQ
+number (as provided by the device) and installs its respective threaded ISR
+(lines 5-8 of listing \ref{list:lis3-irq-register}).
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the free-fall IRQ
+		(from \keyword{probe()} in \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-irq-register}
+]
+/* Get IRQ (only if free-fall is enabled) */
+if (pdata->free_fall_cfg & LIS3_FF_ALL) {
+  ...
+  /* Register IRQ */
+  err = request_threaded_irq(client->irq, NULL,
+    lis3lv02d_isr_thread,
+    IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+    DEVICE_NAME, priv);
+  ...
+  priv->ff_enabled = true;
+}
+\end{lstlisting}
+
+The free-fall is notified in form of a KEY event. As for all the input
+events this requires two steps: registering with the input subsystem
+and reporting upon detection of free-fall.
+The former being executed by \keyword{lis3lv02d\_poll\_enable()} (lines 20-23
+of listing \ref{list:lis3-poll-enable}), and the latter being handled by the
+free-fall ISR as shown below.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Notification of a free-fall KEY event
+		(from \keyword{lis3lv02d\_isr\_thread()} in \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-isr}
+]
+/* Report free-fall (KEY) event */
+input_report_key(input, KEY_FREE_FALL, true);
+input_report_key(input, KEY_FREE_FALL, false);
+input_sync(input);
+\end{lstlisting}
+
+
+%-------------------------------------------------------------------------------
+\subsection{LIS3LV02DL settings}
+\label{sec:lis3_settings}
+
+The customization of the LIS3LV02DL settings is done based on \emph{platform 
+data}.
+These are data attached to a platform device, that are completely specific to
+a given device. It allows the board initialization file to transmit detailed and
+custom information about the device to the driver.
+In this project's context, the platform data is represented in form of a
+\keyword{lis3lv02d\_nhk8815\_platform\_data} structure
+(\refl{list:lis3-paltform-data}) which allows to set a number of 
+LIS3LV02DL parameters including the acceleration full-range (2g or 6g), free-fall 
+settings, polling interval, etc..
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {LIS3LV02DL driver's platform data
+		(from \emph{lis3lv02d-nhk8815.h}).},
+	label = {list:lis3-paltform-data}
+]
+/* Platform data */
+struct lis3lv02d_nhk8815_platform_data {
+  unsigned char device_cfg;
+  unsigned char free_fall_cfg;
+  unsigned int free_fall_threshold;
+  unsigned char free_fall_duration;
+  unsigned int poll_interval;
+}
+\end{lstlisting}
+
+The board initialization code may omit to transmit custom data, as it relies on
+the driver using its default settings. This is precisely the solution adopted for
+this project (line 6 of listing \ref{list:lis3-i2cdev-declaration}).
+One may choose the other way round and set up the \keyword{platform\_data}
+member of \keyword{i2c\_board\_info} to point to a 
+\keyword{lis3lv02d\_nhk8815\_platform\_data} structure with custom settings.
+
+Upon probing the driver checks whether \keyword{platform\_data} holds a valid
+pointer and, if this is the case, loads the custom settings. Otherwise it uses
+the default values. Below is the code responsible for this action.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Loading of LIS3LV02DL platform  data
+		(\keyword{lis3lv02d\_probe()} in \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-check-platform-data}
+]
+/* Save pointer to platform data */
+pdata = client->dev.platform_data;
+if (!pdata) {
+  dev_info(&client->dev,
+  "no platform data, using defaults\n");
+  pdata = &lis3lv02d_default_init;
+}
+\end{lstlisting}
+
+\refl{list:lis3-platform-data-defaults} shows the default settings for the
+LIS3LV02DL device as they are defined in \emph{lis3lv02d-nhk8815.c}.
+
+The driver was built as a module and manually loaded into the kernel using the
+\keyword{insmod} program. Upon successful load the driver delivers an information
+message about its settings to the kernel as shown in \reff{fig:lis3-insmod}.
+The last command, \keyword{lsmod}, outputs the list of modules currently loaded
+into the kernel (only \keyword{lis3lv02d-nhk8815} in this example).
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {LIS3LV02DL default setup
+		(from \emph{lis3lv02d-nhk8815.c}).},
+	label = {list:lis3-platform-data-defaults}
+]
+/* LIS3LV02DL default configuration */
+static const struct lis3lv02d_nhk8815_platform_data
+	lis3lv02d_default_init = {
+
+  .device_cfg = LIS3_ODR_40HZ | LIS3_FS_2G,
+  .poll_interval = 500,
+  .free_fall_cfg = LIS3_FF_XL | LIS3_FF_YL | LIS3_FF_ZL,
+  .free_fall_threshold = 600,
+  .free_fall_duration = 5,	/* 1/ODR [s] */
+};
+\end{lstlisting}
+
+\begin{figure*}[t]
+% \centering
+ \includegraphics[width=11.8cm]{./figures/dump-lis3lv02d-insmod.png}
+ \caption{Message showed upon loading LIS3LV02DL module with default settings.}
+ \label{fig:lis3-insmod}
+\end{figure*}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{I2C bus driver}
+\label{sec:i2c_bus_driver}
+
+As mentioned in section \ref{sec:nomadik_nhk8815_platform} the STn8815 processor
+integrates two \iic controllers that can be programmed to work in standard, fast
+or high-speed mode. Each controller is designed to operate in a multi-master environment,
+either as a master or as a slave. However, because the STn8815 is the only master
+on board, and seeing that at this time Linux only operates \iic in master mode, 
+the \iic bus driver presented here supports master mode only.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Initializing and probing}
+\label{sec:adapter_init_probe}
+Initializing and probing the STn8815 \iic bus driver is performed in a similar
+way as for LIS3LV02DL client driver (section \ref{sec:lis3_init_probe}), with
+the major difference being that the former uses a \emph{platform bus}.
+
+The platform bus requires that any \iic \emph{adapter} (or equivalently
+\emph{controller})
+\footnote{The two terms are interchangeable in meaning and refer to the
+peripheral device that drives the bus (i.e. the master device)}, which is
+controlled by the bus driver, be registered using a \keyword{platform\_device}
+structure.
+This structure represents the bus adapter and provides information such as the
+device name, the device resources and the adapter number, to the bus driver.
+
+Usually the registration of the \iic adapters with the platform bus is
+performed by the board initialization file, as the information needed are
+highly board specific. And this case is no exception.
+
+\refl{list:i2c-reg-platform-dev} shows the part relevant to this
+matter, taken from \emph{arch/arm/mach-nomadik/i2c-8815nhk.c}. Because of the
+STn8815 has two \iic adapters, two platform devices need to be defined: one for
+bus 0 and one for bus 1.
+In this example the former uses the platform data mechanism to customize the
+driver settings, while to the latter relies on the driver defaults
+(see section \ref{sec:adapter_settings} for details about the driver settings).
+
+The \keyword{resource} and \keyword{num\_resources} fields allow to define
+the device resources (for brevity not shown here), including the memory area
+(base address and size) and the interrupt number.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the \iic adapter with the platform bus
+		(from \emph{i2c-8815nhk.c}).},
+	label = {list:i2c-reg-platform-dev}
+]
+/* first bus: i2c0 */
+static struct platform_device nhk8815_i2c_dev0 = {
+  .name		= "stn8815_i2c",
+  .id		= 0,
+  .resource	= &nhk8815_i2c_resources[0],
+  .num_resources = 2,
+  .dev		= {
+    .platform_data = &nhk8815_i2c_dev0_data,
+  },
+};
+
+/* second bus: i2c1 */
+static struct platform_device nhk8815_i2c_dev1 = {
+  .name		= "stn8815_i2c",
+  .id		= 1,
+  .resource	= &nhk8815_i2c_resources[2],
+  .num_resources	= 2,
+  /* No platform data: use driver defaults */
+};
+
+static int __init nhk8815_i2c_init(void)
+{
+  ...
+  platform_device_register(&nhk8815_i2c_dev0);
+  ...
+  platform_device_register(&nhk8815_i2c_dev1);
+  ...
+}
+arch_initcall(nhk8815_i2c_init);
+\end{lstlisting}
+
+On the driver's side, the registration with the platform bus is achieved by
+populating a \keyword{struct  platform\_driver} and passing it to the
+macro \keyword{module\_platform\_driver()} as argument
+(\refl{list:i2c-reg-platform-drv}).
+The platform bus simply compares the \keyword{driver.name} member against
+the name of each device, as defined in the \keyword{platform\_device} data
+structure (Listing \ref{list:i2c-reg-platform-dev}); if they are the same
+the device matches the driver.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the \iic bus driver with the platform bus
+		(from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-reg-platform-drv}
+]
+#define DRIVER_NAME 	"stn8815_i2c"
+
+static const struct dev_pm_ops stn8815_i2c_pm_ops = {
+  SET_RUNTIME_PM_OPS(stn8815_i2c_runtime_suspend,
+                     stn8815_i2c_runtime_resume,
+                     NULL)
+};
+
+static struct platform_driver stn8815_i2c_driver = {
+  .probe  = stn8815_i2c_probe,
+  .remove = __devexit_p(stn8815_i2c_remove),
+  .driver = {
+    .name  = DRIVER_NAME,
+    .owner = THIS_MODULE,
+    .pm	= &stn8815_i2c_pm_ops,
+  },
+};
+module_platform_driver(stn8815_i2c_driver);
+\end{lstlisting}
+
+As usual, binding a device to a driver involves calling the driver's 
+\keyword{probe()} function passing a pointer to the device as a parameter.
+The sequence of operations performed on probing are the following:
+\begin{packedenum}
+	\item Get the device resource definitions.
+	\item Allocate the appropriate memory and remap it to a virtual address
+		for being accessed by the kernel.
+	\item Load the device settings.
+	\item Configure the device hardware.
+	\item Register with the power management system.
+	\item Create the per-device sysfs nodes.
+	\item Request the interrupt and	register the IRQ.
+	\item Set up the \keyword{struct i2c\_adapter} and register the adapter
+		with the \iic core.
+\end{packedenum}
+
+Once all the above steps successfully complete the driver is bounded to the
+devices representing the two STn8815 \iic controllers.
+
+
+%-------------------------------------------------------------------------------
+\subsection{Data transfer}
+\label{sec:adapter_data_transfer}
+
+In the Linux \iic subsystem a bus driver consists of an \emph{adapter driver}
+and an \emph{algorithm driver}. The motivation behind this further division is
+to improve the software reuse and to allow portability. In fact, an algorithm
+driver is intended to contain general code that can be used for a whole class
+of \iic adapters, while each specific adapter driver either depends on one
+algorithm driver, or includes its own implementation.
+
+However, while having a generic algorithm that works for multiple adapters is
+suitable for many cases, in embedded systems, where each \iic bus
+adapter has its own way of interfacing with the processor and the bus,
+it is usual to develop the adapter driver together with its corresponding
+algorithm driver. This is also the case of the STn8815 \iic bus driver.
+
+The bus driver registers with the \iic subsystem by using a
+\keyword{struct i2c\_adapter} that is instantiated and initialized by the
+driver's \keyword{probe()} function, as shown in \refl{list:i2c-adapter-reg}.
+The \keyword{i2c\_adapter} structure's \keyword{algo} member is set up to
+point to a \keyword{struct i2c\_algorithm} which in turn holds two pointers:
+\begin{packeditems}
+	\item \keyword{master\_xfer} points to the function that implements the
+		actual \iic transmit and receive algorithm.
+	\item \keyword{functionality} points to a function that returns the
+		features supported by the \iic adapter.
+\end{packeditems}
+
+To communicate with a client the \iic subsystem offers two class of functions:
+one for \iic plain communication which includes \keyword{i2c\_master\_send()},
+\keyword{i2c\_master\_recv()} and \keyword{i2c\_transfer()}, and a second one
+that uses SMBus commands
+\footnote{SMBus is a subset of \iic}.
+However, whichever method is used, the data transfer relies on the bus driver's
+function pointed to by \keyword{master\_xfer}, as the \iic core ultimately calls
+this function for the actual transfer to take place.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Registration of the \iic adapter (from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-adapter-reg}
+]
+/* I2C algorithm structure */
+static struct i2c_algorithm stn8815_i2c_algo = {
+  .master_xfer   = stn8815_i2c_xfer,
+  .functionality = stn8815_i2c_func,
+};
+
+/* Probe function */
+static int __devinit stn8815_i2c_probe
+	(struct platform_device *pdev)
+{
+  ...
+  adap = kzalloc(sizeof(struct i2c_adapter),
+         GFP_KERNEL);
+  ...
+  adap->algo = &stn8815_i2c_algo;
+  ...
+  err = i2c_add_numbered_adapter(adap);
+  ...
+}
+\end{lstlisting}
+
+As shown in listing \ref{list:i2c-adapter-reg}, \keyword{stn8815\_i2c\_xfer()}
+is the transfer function installed by the STn8815 \iic bus driver.
+This function receives an array of messages as argument and processes them in
+sequence by calling \keyword{stn8815\_i2c\_xfer\_rd()} or
+\keyword{stn8815\_i2c\_xfer\_wr()} depending on whether the message being
+processed is marked for read or write.
+Once all messages have been sent \keyword{stn8815\_i2c\_xfer()} succesfully
+returns, otherwise, upon detecting a communication error, aborts the transmission
+and returns an appropriate error code.
+
+\begin{figure*}[t]
+ \centering
+ \includegraphics[width=16cm]
+ 	{./figures/i2c-data-transfer-seq-diag.png}
+ \caption{Sequence diagram of an \iic transaction.}
+ \label{fig:i2c-trans-seq-diag}
+\end{figure*}
+
+The \iic bus driver uses the STn8815 \iic controller's interrupt
+capability to handle the data transfer. More precisely it uses interrupts to
+trigger the completion of a transaction and to detect a bus error. Handling
+these interrupts is in charge of \keyword{stn8815\_i2c\_isr()} interrupt service
+routine (ISR).
+Its role is to identify the interrupt source, complete the transaction
+by reporting the result to the \emph{task-level}
+\footnote{\emph{Task-level} refers to code not running in interrupt context
+(as opposed to \emph{interrupt-level})}
+function that initiated it (either \keyword{stn8815\_i2c\_xfer\_wr()} or
+\keyword{stn8815\_i2c\_xfer\_rd()}), and to clear the interrupt condition from
+the \iic controller.
+
+A \emph{completion variable} is used to synchronize between the task-level
+function and the ISR. The former initiates the transmission and waits on the
+completion variable while the \iic controller performs the transaction; upon
+completion, the controller issues an interrupt request which is processed by
+\keyword{stn8815\_i2c\_isr()}; once it has accomplished its job, upon returning
+from interrupt, \keyword{stn8815\_i2c\_isr()} uses the completion variable to
+wake up the task-level function.
+Additionally, a timeout is specified to limit the time spent by the task-level
+function on waiting on the completion variable. The whole process is depicted
+in the sequence diagram of \reff{fig:i2c-trans-seq-diag}.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {Task-level and ISR synchronization using a completion variable
+		(from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-completion-sync}
+]
+/* I2C master read */
+static int stn8815_i2c_xfer_rd(
+    struct i2c_adapter *adap,
+    struct i2c_msg *pmsg, bool stop)
+{
+  ...
+  /* Initialize completion */
+  init_completion(&dev->msg_complete);
+  ...
+
+  /* Wait for completion */
+  i = wait_for_completion_timeout(&dev->msg_complete,
+                                  I2C_TIMEOUT);
+  if (i < 0)
+    return i;
+  if (i == 0) {
+    dev_err(dev->dev, "Controller timeout\n");
+    return -ETIMEDOUT;
+  }
+  ...
+}
+
+/* ISR */
+static irqreturn_t stn8815_i2c_isr(int irq,
+	void *dev_id)
+{
+  ...
+  /* Complete */
+  complete(&dev->msg_complete);
+  return IRQ_HANDLED;
+}
+\end{lstlisting}
+
+\refl{list:i2c-completion-sync} shows how the synchronization
+mechanism is implemented.
+The completion variable is dynamically created and initialized via
+\keyword{init\_completion()} (line 8). Afterwards, a call to
+\keyword{wait\_for\_completion\_timeout()} (line 12) suspends the task until
+either the ISR signals the completion by calling \keyword{complete()} (line 29)
+or the timeout expires.  In either case the return value is tested for error
+conditions.
+
+\begin{figure*}[t]
+% \centering
+ \includegraphics[width=12.4cm, height=1.7cm]{./figures/dump-adapter-insmod.png}
+ \caption{Message showed upon loading the STN8815 \iic bus driver module with
+ 	default settings.}
+ \label{fig:i2c-adapter-insmod}
+\end{figure*}
+
+
+%-------------------------------------------------------------------------------
+\subsection{Power management}
+\label{sec:adapter_power_management}
+
+The \iic bus driver relies on the power management infrastructure of the Linux
+kernel to achieve run-time power savings. To use this feature the kernel needs
+to be configured with "Runtime power management" (\keyword{CONFIG\_PM\_RUNTIME})
+option enabled.
+
+The functions that implements the driver's power saving policy are registered
+upon registering the driver with the platform bus (refer to listing
+\ref{list:i2c-reg-platform-drv} on page \pageref{list:i2c-reg-platform-drv}).
+This is done by initializing the \keyword{driver.pm} member of the
+\keyword{platform\_driver} structure with a pointer to
+\keyword{struct dev\_pm\_ops} which in turn holds the address of the driver's
+power management functions.
+
+When the power management subsystem in Linux determines that the \iic adapter
+is to be suspended, it calls \keyword{stn8815\_i2c\_runtime\_suspend()}.
+This function simply disables the \iic controller.  
+When the adapter is to be resumed, \keyword{stn8815\_i2c\_runtime\_resume()} is 
+called and consequently the \iic controller is re-enabled.
+
+The power management framework creates for the \iic adapter 0 a set of sysfs
+nodes that allow to query or modify its power status. They are all located in 
+\keyword{/sys/devices/platform/stn8815\_i2c.0/power/}.
+
+For example, typing \keyword{cat runtime\_status} returns the adapter's power
+status, while \keyword{echo 'off' > control} disables the adapter's
+runtime power management.
+
+
+%-------------------------------------------------------------------------------
+\subsection{\iic bus adapter settings}
+\label{sec:adapter_settings}
+
+As for LIS3LV02DL, the \iic bus driver receives custom settings from the board
+initialization code via the platform data mechanism.
+Looking back at listing \ref{list:i2c-reg-platform-dev}, the adapter 0 uses a
+custom setup (line 8), while the adapter 1 relies on the driver's defaults
+(line 18).
+
+The platform data of the \iic adapter is defined in \emph{i2c-stn8815.h} and
+reported in \refl{list:i2c-adapter-platform-data}.
+It is represented in form of a \keyword{i2c\_stn8815\_platform\_data} structure
+and allows to specify the speed mode (standard, fast or high-speed), 
+the bus filtering and the master code.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {STN8815 \iic bus driver's platform data
+		(from \emph{i2c-stn8815.h}).},
+	label = {list:i2c-adapter-platform-data}
+]
+/* Platform data */
+struct i2c_stn8815_platform_data {
+  unsigned char filter;
+  unsigned char speed;
+  unsigned int  master_code;
+}
+\end{lstlisting}
+
+The driver loads the platform data on probing and, if not provided, uses the 
+default setup as defined by \emph{nhk8815\_i2c\_default\_init} 
+(\refl{list:i2c-adapter-data-defaults}).
+The information message sent to the kernel by the driver on successful load is
+shown in \reff{fig:i2c-adapter-insmod}.
+
+\begin{lstlisting}[
+	xleftmargin=15pt,
+	frame = l,
+	numbers = left,
+	caption = {STN8815 \iic bus adapter default setup
+		(from \emph{i2c-stn8815.c}).},
+	label = {list:i2c-adapter-data-defaults}
+]
+/* STN8815-I2C platform data default */
+static struct i2c_stn8815_platform_data
+	nhk8815_i2c_default_init = {
+  .filter	= I2C_STN8815_FILTER_NONE,
+  .speed	= I2C_STN8815_SPEED_STANDARD,
+  .master_code = 0,
+};
+\end{lstlisting}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Testing}
+\label{sec:testing}
+
+As I said in section \ref{sec:project_setup} my choice for this project was
+to work with the official kernel, which yet lacks many drivers necessary to
+fully operate the Nomadik NHK8815 board. Clearly this choice influenced the
+way the design process was conducted.
+For example, the on-board LCD display and keypad were not used for interfacing
+to the system because of the absence of the respective drivers in the kernel.
+Instead, I connected to the target board through a serial line (UART) and
+interfaced with it using a terminal emulator. This was achieved by configuring
+appropriately the bootloader installed on the target, namely U-Boot
+(\cite{uboot}).
+
+A number of tools and scripts were used to help testing the drivers throughout
+the design process. They all run in user-space and interface with the Linux
+kernel, each one using either the \emph{sysfs} interface, the \emph{evdev}
+interface or the \emph{i2c-dev} interface.
+\reff{fig:whole-driver-system} shows a view of the whole driver
+system including the tools mentioned above.
+This section describes some simple techniques that allows to test the drivers
+using these tools. The tests are classified based on the type of interface 
+they rely on.
+
+\begin{figure*}[t]
+ \centering
+ \includegraphics[width=15cm]{./figures/nhk8815-whole-driver-system.png}
+ \caption{The LIS3LV02DL inertial sensor and STn8815 \iic host controller
+ 	complete driver structure.}
+ \label{fig:whole-driver-system}
+\end{figure*}
+
+
+%-------------------------------------------------------------------------------
+\subsection{Testing via the \emph{sysfs} interface}
+\label{sec:sysfs-testing}
+The usage the LIS3LV02DL sysfs interface was previously described in section
+\ref{sec:lis3_sysfs}.
+This interface turns out to be useful also for debugging activity even
+during the early stages of design, when most of the driver functions are yet
+to be implemented.
+An example of this is represented by the sysfs nodes \keyword{read} and
+\keyword{write} which were designed solely to assist debugging (in fact they
+are available only if the driver is built for debugging, i.e the keyword \keyword{LIS3LV02D\_DEBUG} is defined in the driver's source file). 
+
+\keyword{read} and \keyword{write} together are used in the shell script
+\emph{lis3\_read.sh} to implement a simple technique for testing the drivers.
+This script allows to read a user defined set of registers from the accelerometer,
+and has the following syntax:
+\begin{verbatim}
+	lis3_read.sh <filename>
+\end{verbatim}
+where \keyword <filename> refers to a file holding the list of registers with
+their respective address. Below is an example of this file (from 
+\emph{lis3\_registers} provided along with the script):
+
+\begin{lstlisting}[language=bash]
+# ------------------------------------
+# Register name   Register Address
+#                   (hex format)
+# ------------------------------------
+CTRL_REG1               20
+CTRL_REG2               21
+CTRL_REG3               22
+STATUS_REG              27
+FF_WU_CFG               30
+FF_WU_SRC               31
+FF_WU_THS_L             34
+FF_WU_THS_H             35
+FF_WU_DURATION          36
+\end{lstlisting}
+
+For each register in the list \emph{lis3\_read.sh} performs two steps:
+
+\begin{packedenum}
+	\item Sets up the address of the register via sysfs \keyword{write}.
+	\item Reads the address content via sysfs \keyword{read}.
+\end{packedenum}
+
+Below is the output of the script when invoked with \emph{lis3\_registers}
+as a command line parameter.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=7cm]{./figures/dump-lis3-read.png}
+ \caption{Output of the script \emph{lis3\_read.sh} with \emph{lis3\_registers}
+ 	as a register file.}
+ \label{fig:lis3-read}
+\end{figurehere}
+
+
+%-------------------------------------------------------------------------------
+\subsection{Testing via the \emph{evdev} interface}
+\label{sec:evdev-testing}
+
+In Linux the directory \emph{/dev} is conventionally used to store the
+device files, i.e. files representing interfaces for device drivers. They
+allow user programs to access hardware devices through their respective
+drivers. Linux classifies drivers in three categories: character, block and
+network drivers.
+
+LIS3LV02D driver fits in neither of the above three categories, as it doesn't
+create a corresponding device file.
+Consequently it's not possible for a user program to directly operate on the
+accelerometer via a node in \emph{/dev}.
+Instead, upon enabling the device polling, an indirect access is provided by
+the \emph{evdev} interface of the input subsystem via a
+\keyword{/dev/input/eventX} node.
+The accelerometer driver reports the events to the input core, which in turn
+writes them to this file in an appropriate format for being processed by a user
+program.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/dump-evtest.png}
+ \caption{Example of usage of \emph{evtest}.}
+ \label{fig:evtest-dump}
+\end{figurehere}
+
+An example of such a program is \emph{evtest} \cite{evtest}. It is a free
+software released under GNU GPL license and available online in many versions;
+1.23 is the one used in this project. This tool allows to display the events
+reported by an input device. \reff{fig:evtest-dump} shows a sample output from
+evtest on the target system.
+
+Initially evtest shows some information about the input device and its supported
+event types (Sync, Key and Absolute) then, starting from the line
+\keyword{Testing ... (interrupt to exit)}, keeps displaying any data received
+from the event node.
+Since the accelerometer driver terminates each notification by a "sync" event, 
+from the sample dump we can identify three distinct groups of events.
+Both the first and the second groups represent absolute events corresponding to
+the acceleration measured along the three cartesian axes.
+The third group regards the free-fall which is reported as a key press
+(value 1) and release (value 0) sequence of events.
+
+
+
+
+%-------------------------------------------------------------------------------
+\subsection{Testing via the \emph{i2c-dev} interface}
+\label{sec:i2c-dev-testing}
+
+The \emph{i2c-dev} interface was designed to allow driving the \iic devices from
+user space. Each \iic adapter is assigned a number, say \keyword{X}, and a
+corresponding device file is created in \keyword{/dev/i2c-X}.
+It is indeed possible for a user mode driver to access an \iic client by
+operating the adapter \keyword{X} through its node \keyword{/dev/i2c-X}.
+
+However, in this project the \emph{i2c-dev} interface was used with the only
+purpose of testing the \iic bus driver. To this aim I wrote a user program
+called \emph{i2cexe} which allows to transmit custom messages to a generic \iic
+client. In the above scenario this tool plays the role of a user mode device
+driver without effectively being a real driver, as it performs only a single
+\iic transaction.
+
+Note that, unlike the testing techniques presented so far, this method requires
+no \iic client driver whatsoever, i.e. only the \iic bus driver under test is
+needed in order to communicate with any device on the bus.
+In addition, the Linux kernel must be configured with with "I2C device
+interface" (\keyword{CONFIG\_I2C\_DEV}) option enabled.
+
+\emph{evtest} can be used to transmit either a read message or a write message, 
+depending on whether it is invoked with the command line option \keyword{-r}
+or \keyword{-w}. Below is its syntax:
+\begin{verbatim}
+	i2cexe -r SLAVE_ADDR [-o offset] [-n nbytes]
+	i2cexe -w SLAVE_ADDR [-o offset] VALUE
+\end{verbatim}
+where (each value is expressed in hexadecimal format):
+\begin{packeddesc}
+	\item[\keyword{SLAVE\_ADDR}] is the address of the \iic client.
+	\item[\keyword{offset}] is the offset relative to the client address space.
+	\item[\keyword{nbytes}] specifies the number of bytes to read (default 1).
+	\item[\keyword{VALUE}] is the value to write.
+\end{packeddesc}
+
+\reff{fig:i2cexe-dump} shows a sample run where eight bytes of data are
+read from the accelerometer device (client address 1D), starting at offset 28
+(this area maps to three signed integer, stored in little endian format, and
+corresponding to the x-y-z acceleration values, which equals to 57,-5,-1071 in 
+decimal).
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/dump-i2cexe.png}
+ \caption{Example of usage of \emph{i2cexe}.}
+ \label{fig:i2cexe-dump}
+\end{figurehere}
+
+As explained, one major advantage of using the \emph{i2c-dev} interface is the
+possibility to access any device on the \iic bus without the need to install a 
+kernel device driver for it. Indeed \emph{i2cexe} can be used to communicate
+with \iic devices other than the accelerometer. This idea is implemented by
+the shell script \emph{i2cprobe.sh} which uses i2cexe to "ping" some devices
+from the list of table \ref{table:i2c-device-addresses}. The ping action
+consists of a simple read with no offset value. Upon receiving an answer the
+device is marked as \emph{found}, meaning that the \iic trasaction was performed
+correctly. Below is the output of the script:
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/dump-i2cprobe.png}
+ \caption{Output of the script \emph{i2cprobe.sh}}
+ \label{fig:i2cprobe}
+\end{figurehere}
+
+\emph{i2cexe} came in handy also to debug the \iic bus driver during the first
+attempts to plug in the driver to the kernel or in presence of communication
+errors (e.g. time out). To help to examine these situations I used a digital
+oscilloscope connected to the SDA and SCL line of the \iic bus.
+\reff{fig:scope-i2cexe-current-read-std} shows the \iic bus waveforms of a
+current address read at standard speed (100kHz).
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/scope-i2cexe-current-read-std.png}
+ \caption{SCL and SDA waveforms of a current address read operation performed
+	at standard speed (SDA on ch1, SCL on ch2).}
+ \label{fig:scope-i2cexe-current-read-std}
+\end{figurehere}
+
+After the START bit the host transmits the 7-bit slave address 1D and the read
+bit. The client sends back an acknowledge bit (ack) followed by the value 3A.
+Then the host terminates the transaction by a not-acknowledge (nack) and a stop
+bit.
+
+To verify the controller speed configuration, the same transaction was performed
+in fast speed mode (400Khz) as well. \reff{fig:scope-i2cexe-current-read-fast}
+shows the corresponding \iic bus waveforms.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/scope-i2cexe-current-read-fast.png}
+ \caption{SCL and SDA waveforms of a current address read operation performed at
+	fast speed.}
+ \label{fig:scope-i2cexe-current-read-fast}
+\end{figurehere}
+
+The sawtooth-like characteristic of the signals is due to the open-drain
+configuration of the bus, which is essential to allow concurrent operation of
+multiple master, but on the other hand, negatively affects the bandwidth.
+This is especially evident in the rising edge because the high level is
+achieved by terminator resistors which "pulls" the line back up when all
+devices release it.
+Together with the wire capacitance these pull-up resistors are responsible for
+the exponential rising edges.
+
+Here is a further example of using \emph{i2-dev}, this time to access
+the on-board battery charger (slave address 70). For example, the command
+\keyword{i2cexe -r 70 -o 2} performs a random read of one byte from slave
+address 70.
+
+\begin{figurehere}
+ \centering
+ \includegraphics[width=8cm]{./figures/scope-i2cexe-random-read-std.png}
+ \caption{SCL and SDA waveforms of a random read operation from slave address 70
+	at offset 2.}
+ \label{fig:scope-i2cexe-random-read-std}
+\end{figurehere}
+
+The corresponding \iic bus waveforms of \reff{fig:scope-i2cexe-random-read-std} 
+reveal that the whole transaction is broken down in two parts. First, the host
+writes the offset where the desired read will start (2 in the example).
+Then the hosts sends a repeated start bit followed by a current address read
+instruction.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+
+This paper has dealt with the \iic device driver design in a Linux embedded
+system environment.
+Due to the tight coupling between these types of drivers and the underlying
+hardware, usually their development is undertaken by the manufacturer of the
+embedded system. Therefore most of the commercial boards ship with a tailored
+Linux distribution which has all the drivers necessary for the devices on the
+board. This way the engineers can focus on developing the application specific
+software rather than building kernel components.
+
+Nevertheless, this paper gives an insight into how the Linux kernel supports
+\iic, making it helpful for those who need to modify an existing implementation
+to fit their own needs.
+
+Some methods to interface the device driver with the user land have been
+presented as well. Although implemented for testing purposes, these methods
+also apply to real applications. Many other solutions may be adopted to extend
+this work in many ways. Some example include updating the accelerometer driver
+with a character driver interface and power saving features, adding support
+for \iic high-speed mode to the bus driver, etc.
+
+This report and all the source code are publicly available through the git
+repository at \url{https://github.com/fghiro/i2c-nomadik}.  
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% No cited references 
+\nocite{rubini2005ldd}
+\nocite{yaghmour2008bels}
+\nocite{sally2009proles}
+\nocite{love2010lkd}
+\nocite{nxp-i2c-spec}
+\nocite{linux-kernel-archive}
+\nocite{loeliger2012git}
+
+% We suggest the use of JabRef for editing your bibliography file (Report.bib)
+\bibliographystyle{splncs}
+\bibliography{Report}
+
+\end{multicols}
+\end{document}
