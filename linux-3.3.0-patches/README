@@ -1,0 +1,7 @@
+This folder holds the linux kernel patches required by this project.
+They should applied in the order specified by the prefix number, starting
+from the tag 3.3 of the official kernel git repository (it is recommended
+to create a new branch from this tag).
+
+'kernel_config' is the kernel configuration file used to build the kernel
+image (renamed from '.config').
