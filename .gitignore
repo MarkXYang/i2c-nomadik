@@ -41,3 +41,4 @@
 !report/Report.pdf
 !linux-3.3.0-patches/.config
 !sdcard/ramdisk.cpio.gz
+!datasheets/*.pdf
